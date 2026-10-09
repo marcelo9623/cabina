@@ -1,7 +1,7 @@
-// Registro de Service Worker para uso Offline
+// Service Worker para soporte Offline
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW error:', err));
+    navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW offline:', err));
   });
 }
 
@@ -31,7 +31,15 @@ let cfg = JSON.parse(localStorage.getItem('emeveCfg') || 'null') || {
   frames: defaultFrames
 };
 
-// Pestañas del Modal
+// Toast Notificaciones
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Navegación Pestañas Modal
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -42,8 +50,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 function apply() {
-  ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg'].forEach(k => { if($(k)) $(k).value = cfg[k]; });$('stripMode').value = cfg.stripMode || 'duplicate';
-  $('stripModeField').style.display = cfg.format === '2x6x2' ? 'block' : 'none';$('homeEvent').textContent = cfg.event || 'Toca para comenzar';
+  ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg'].forEach(k => { if ($(k)) $(k).value = cfg[k]; });$('stripMode').value = cfg.stripMode || 'duplicate';
+  $('stripModeField').style.display = cfg.format === '2x6x2' ? 'block' : 'none';$('homeEvent').textContent = cfg.event || 'Toca para comenzar la experiencia';
   if (cfg.frame) {
     let im = new Image();
     im.onload = () => { frame = im; renderDesignPreview(); };
@@ -54,12 +62,12 @@ function apply() {
 }
 
 function saveCfg() {
-  ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg'].forEach(k => { if($(k)) cfg[k] =$(k).value; });
+  ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg'].forEach(k => { if ($(k)) cfg[k] =$(k).value; });
   cfg.stripMode = $('stripMode').value;
   cfg.frames = readFrameList();
   cfg.frame = frame ? frame.src : null;
   localStorage.setItem('emeveCfg', JSON.stringify(cfg));
-  $('homeEvent').textContent = cfg.event || 'Toca para comenzar';
+  $('homeEvent').textContent = cfg.event || 'Toca para comenzar la experiencia';
 }
 
 function show(id) {
@@ -76,7 +84,7 @@ function dots() {
     const t = $('thumb' + (i + 1));
     if (t) {
       t.classList.toggle('done', i < shots.length);
-      t.innerHTML = i < shots.length ? `<img src="${shots[i]}">` : `<span>${i + 1}</span>`;
+      t.innerHTML = i < shots.length ? `<img src="${shots[i]}">` : `<div class="thumbNum">${i + 1}</div>`;
     }
   }
 }
@@ -98,7 +106,7 @@ async function camera() {
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 async function countdown(seconds, n) {
-  $('captureStatus').textContent = `Foto ${n} de 3 en camino…`;
+  $('captureStatus').textContent = `¡Atención! Toma ${n} de 3`;
   for (let i = seconds; i > 0; i--) {
     $('count').style.display = 'flex';$('count').textContent = i;
     await wait(1000);
@@ -125,11 +133,11 @@ async function take() {
     shots.push(photo);
     dots();
     $('flash').style.display = 'block';
-    await wait(100);
+    await wait(120);
     $('flash').style.display = 'none';
     if (n < 3) await wait(400);
   }
-  $('captureStatus').textContent = '¡Procesando imágenes!';
+  $('captureStatus').textContent = '¡Componiendo tus fotos!';
   await wait(300);
   makeOutput();
 }
@@ -161,8 +169,8 @@ async function makeOutput() {
 
   if (frame) x.drawImage(frame, 0, 0, W, H);
   x.fillStyle = cfg.fg; x.textAlign = 'center';
-  if (cfg.topText) { x.font = 'bold 40px Arial'; x.fillText(cfg.topText, W / 2, 60); }
-  if (cfg.event) { x.font = 'bold 30px Arial'; x.fillText(cfg.event, W / 2, H - 40); }
+  if (cfg.topText) { x.font = 'bold 38px Arial'; x.fillText(cfg.topText, W / 2, 60); }
+  if (cfg.event) { x.font = 'bold 28px Arial'; x.fillText(cfg.event, W / 2, H - 40); }
   show('result');
 }
 
@@ -182,13 +190,13 @@ function renderFrameList() {
   list.innerHTML = '';
   cfg.frames.forEach((f, i) => {
     const d = document.createElement('div');
-    d.className = 'frameItem mt-2';
-    d.innerHTML = `<span>Marco ${i+1}:</span> 
+    d.className = 'frameItem';
+    d.innerHTML = `<strong>Marco ${i+1}:</strong> 
       <select class="fp"><option value="1">Foto 1</option><option value="2">Foto 2</option><option value="3">Foto 3</option></select>
-      <input class="fx" type="number" value="${f.x}" style="width:60px"> %X
-      <input class="fy" type="number" value="${f.y}" style="width:60px"> %Y
-      <input class="fw" type="number" value="${f.w}" style="width:60px"> %W
-      <input class="fh" type="number" value="${f.h}" style="width:60px"> %H`;
+      <input class="fx" type="number" value="${f.x}" style="width:50px">%X
+      <input class="fy" type="number" value="${f.y}" style="width:50px">%Y
+      <input class="fw" type="number" value="${f.w}" style="width:50px">%W
+      <input class="fh" type="number" value="${f.h}" style="width:50px">%H`;
     list.appendChild(d);
     d.querySelector('.fp').value = f.photo;
   });
@@ -199,24 +207,36 @@ function renderDesignPreview() {
   const { W, H } = outputSize(); c.width = W; c.height = H;
   const x = c.getContext('2d');
   x.fillStyle = $('bg').value; x.fillRect(0, 0, W, H);
+
+  // Guía visual punteada de corte si es 2x6x2
+  if ($('format').value === '2x6x2') {
+    x.setLineDash([10, 10]);
+    x.strokeStyle = '#eab308';
+    x.lineWidth = 4;
+    x.beginPath();
+    x.moveTo(W / 2, 0); x.lineTo(W / 2, H);
+    x.stroke();
+    x.setLineDash([]);
+  }
 }
 
-// Botones e Interacciones
+// Listeners de Interacción
 $('begin').onclick = async () => {
   saveCfg(); shots = []; dots();
   if (await camera()) { show('capture'); take(); }
-  else alert('Asegúrate de permitir acceso a la cámara.');
+  else showToast('⚠️ Por favor concede acceso a la cámara.');
 };
 
 $('cancel').onclick = () => { shots = []; dots(); show('home'); };
 $('again').onclick = () => { shots = []; dots(); show('home'); };$('adminBtn').onclick = () => { renderFrameList(); renderDesignPreview(); show('settings'); };
-$('closeSettings').onclick = () => { saveCfg(); show('home'); };$('saveTemplate').onclick = () => { saveCfg(); alert('Ajustes guardados'); show('home'); };
+$('closeSettings').onclick = () => { saveCfg(); show('home'); };$('saveTemplate').onclick = () => { saveCfg(); showToast('✅ Ajustes guardados correctamente'); show('home'); };
 
 $('save').onclick = () => {
   let a = document.createElement('a');
   a.download = `EMEVE-${cfg.event || 'PHOTOBOOTH'}.jpg`;
   a.href = $('out').toDataURL('image/jpeg', .95);
   a.click();
+  showToast('💾 Imagen descargada');
 };
 
 $('print').onclick = () => window.print();
