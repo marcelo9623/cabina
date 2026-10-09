@@ -9,6 +9,7 @@ let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
   shotCount: 3,
   filter: "none",
   countdownSec: 5,
+  autoPrint: false,
   shape: "rect",
   borderRadius: 20,
   overlayData: null,
@@ -24,6 +25,7 @@ window.addEventListener('DOMContentLoaded', () => {
   syncInputsWithConfig();
   loadSavedOverlay();
   updateTemplatePreview();
+  updateSidebarPreview([]);
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && document.getElementById('sec-kiosk').classList.contains('active')) {
@@ -40,7 +42,10 @@ function showSection(sectionId) {
   document.getElementById(`sec-${sectionId}`).classList.add('active');
   if (sectionId === 'templates') updateTemplatePreview();
   if (sectionId === 'gallery') renderGallery();
-  if (sectionId === 'kiosk') initWebcam();
+  if (sectionId === 'kiosk') {
+    initWebcam();
+    updateSidebarPreview(capturedShots);
+  }
 }
 
 function syncInputsWithConfig() {
@@ -50,6 +55,7 @@ function syncInputsWithConfig() {
   document.getElementById('tmpl-shot-count').value = templateConfig.shotCount || 3;
   document.getElementById('tmpl-filter-select').value = templateConfig.filter || "none";
   document.getElementById('tmpl-countdown-input').value = templateConfig.countdownSec || 5;
+  document.getElementById('tmpl-auto-print').value = templateConfig.autoPrint ? "true" : "false";
   document.getElementById('tmpl-shape-select').value = templateConfig.shape || "rect";
   document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
 
@@ -81,6 +87,7 @@ function updateTemplateConfig() {
   templateConfig.shotCount = parseInt(document.getElementById('tmpl-shot-count').value) || 3;
   templateConfig.filter = document.getElementById('tmpl-filter-select').value;
   templateConfig.countdownSec = parseInt(document.getElementById('tmpl-countdown-input').value) || 5;
+  templateConfig.autoPrint = document.getElementById('tmpl-auto-print').value === "true";
   templateConfig.shape = document.getElementById('tmpl-shape-select').value;
   templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
 
@@ -90,6 +97,7 @@ function updateTemplateConfig() {
   togglePhotoGroupsVisibility();
   saveTemplateConfig();
   updateTemplatePreview();
+  updateSidebarPreview([]);
 }
 
 function updatePhotoPos() {
@@ -116,6 +124,7 @@ function updatePhotoPos() {
 
   saveTemplateConfig();
   updateTemplatePreview();
+  updateSidebarPreview([]);
 }
 
 function saveTemplateConfig() {
@@ -135,6 +144,7 @@ function loadOverlay(event) {
     img.onload = () => {
       currentOverlayImage = img;
       updateTemplatePreview();
+      updateSidebarPreview([]);
     };
     img.src = dataUrl;
   };
@@ -147,6 +157,7 @@ function loadSavedOverlay() {
     img.onload = () => {
       currentOverlayImage = img;
       updateTemplatePreview();
+      updateSidebarPreview([]);
     };
     img.src = templateConfig.overlayData;
   }
@@ -158,6 +169,7 @@ function clearOverlay() {
   document.getElementById('tmpl-overlay-input').value = "";
   saveTemplateConfig();
   updateTemplatePreview();
+  updateSidebarPreview([]);
 }
 
 function updateTemplatePreview() {
@@ -167,7 +179,16 @@ function updateTemplatePreview() {
   }
 }
 
-// DIBUJAR BORDES REDONDEADOS COMPATIBLES CON TODOS LOS NAVEGADORES
+function updateSidebarPreview(photosArray) {
+  const sidebarCanvas = document.getElementById('sidebar-canvas');
+  if (sidebarCanvas) {
+    const ctx = sidebarCanvas.getContext('2d');
+    ctx.fillStyle = templateConfig.bgColor;
+    ctx.fillRect(0, 0, sidebarCanvas.width, sidebarCanvas.height);
+    drawStrip(ctx, 0, photosArray);
+  }
+}
+
 function drawCustomRoundedRect(ctx, x, y, width, height, radius) {
   if (radius <= 0) {
     ctx.rect(x, y, width, height);
@@ -234,7 +255,7 @@ function drawStrip(ctx, offsetX, photosArray) {
       ctx.fillStyle = "#888888";
       ctx.font = "26px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(`Foto ${i + 1} (${pos.orient})`, posX + photoW / 2, posY + photoH / 2);
+      ctx.fillText(`Foto ${i + 1}`, posX + photoW / 2, posY + photoH / 2);
     }
     ctx.restore();
   }
@@ -249,7 +270,7 @@ function drawStrip(ctx, offsetX, photosArray) {
   }
 }
 
-// ACCESO ROBUSTO A LA CÁMARA WEB
+// CÁMARA Y MODO KIOSCO
 async function initWebcam() {
   const video = document.getElementById('webcam');
   if (!video) return;
@@ -272,13 +293,14 @@ async function initWebcam() {
       await video.play();
     } catch (fallbackErr) {
       console.error("Error al acceder a la cámara:", fallbackErr);
-      alert("Por favor concede acceso a la cámara en tu navegador para continuar.");
     }
   }
 }
 
 async function startPhotoSession() {
   capturedShots = [];
+  updateSidebarPreview([]);
+  
   const btn = document.getElementById('start-session-btn');
   btn.disabled = true;
 
@@ -292,6 +314,8 @@ async function startPhotoSession() {
     const img = captureFrameByOrientation(currentOrient);
     capturedShots.push(img);
 
+    updateSidebarPreview(capturedShots);
+
     if (i < totalShots) {
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -299,6 +323,7 @@ async function startPhotoSession() {
 
   btn.disabled = false;
   
+  // RENDERIZADO Y GUARDADO AUTOMÁTICO DE LA TIRA DE 2 STRIPS (4x6")
   const finalCanvas = document.createElement('canvas');
   finalCanvas.width = 1200;
   finalCanvas.height = 1800;
@@ -306,8 +331,16 @@ async function startPhotoSession() {
   drawLayout(finalCanvas, capturedShots);
   
   lastGeneratedPhotoUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
+  
+  // Guardar automáticamente en el almacenamiento local
   savePhotoToStorage(lastGeneratedPhotoUrl);
+  
+  // Desplegar modal gigantesco con la vista previa e impresiones
   showResultModal(lastGeneratedPhotoUrl);
+
+  if (templateConfig.autoPrint) {
+    printCurrentPhoto();
+  }
 }
 
 function runCountdown(seconds, label) {
@@ -379,6 +412,8 @@ function showResultModal(dataUrl) {
 
 function closeResultModal() {
   document.getElementById('result-modal').style.display = 'none';
+  capturedShots = [];
+  updateSidebarPreview([]); // Limpiar la tira para la siguiente sesión
 }
 
 function printCurrentPhoto() {
