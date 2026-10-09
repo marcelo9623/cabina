@@ -1,16 +1,17 @@
 let currentOverlayImage = null;
 let capturedShots = [];
 
-// Configuración de la plantilla con formato 9:16 (ancho x alto proporcional)
 let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
   title: "¡Recuerdo de mi Evento!",
   bgColor: "#ffffff",
   textColor: "#000000",
+  shape: "rect",
+  borderRadius: 20,
   overlayData: null,
   photosPos: [
-    { x: 40, y: 60, w: 520 },  // Foto 1
-    { x: 40, y: 560, w: 520 }, // Foto 2
-    { x: 40, y: 1060, w: 520 } // Foto 3
+    { x: 40, y: 60, w: 520 },
+    { x: 40, y: 560, w: 520 },
+    { x: 40, y: 1060, w: 520 }
   ]
 };
 
@@ -32,8 +33,9 @@ function syncInputsWithConfig() {
   document.getElementById('tmpl-title-input').value = templateConfig.title || "";
   document.getElementById('tmpl-bg-color').value = templateConfig.bgColor || "#ffffff";
   document.getElementById('tmpl-text-color').value = templateConfig.textColor || "#000000";
+  document.getElementById('tmpl-shape-select').value = templateConfig.shape || "rect";
+  document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
 
-  // Sincronizar selectores de posición de las 3 fotos
   const pos = templateConfig.photosPos;
   ['f1', 'f2', 'f3'].forEach((id, i) => {
     if (pos[i]) {
@@ -48,6 +50,8 @@ function updateTemplateConfig() {
   templateConfig.title = document.getElementById('tmpl-title-input').value || "";
   templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
   templateConfig.textColor = document.getElementById('tmpl-text-color').value;
+  templateConfig.shape = document.getElementById('tmpl-shape-select').value;
+  templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
 
   saveTemplateConfig();
   updateTemplatePreview();
@@ -113,7 +117,7 @@ function updateTemplatePreview() {
   }
 }
 
-// RENDERIZADO DE 2 TIRAS 2x6" CON FOTOS EN 9:16
+// RENDERIZADO DE PLANTILLA Y MARCOS DIBUJADOS EN TIEMPO REAL
 function drawLayout(canvas, photosArray) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = templateConfig.bgColor;
@@ -138,9 +142,21 @@ function drawStrip(ctx, offsetX, photosArray) {
   for (let i = 0; i < 3; i++) {
     const pos = templateConfig.photosPos[i];
     const photoW = pos.w;
-    const photoH = photoW * (16 / 9); // Calcular alto manteniendo formato 9:16
+    const photoH = photoW * (16 / 9);
     const posX = offsetX + pos.x;
     const posY = pos.y;
+
+    ctx.save();
+    ctx.beginPath();
+
+    // Aplicar forma (Rectangular o Bordes Redondeados)
+    if (templateConfig.shape === 'rounded') {
+      const r = templateConfig.borderRadius;
+      ctx.roundRect(posX, posY, photoW, photoH, r);
+    } else {
+      ctx.rect(posX, posY, photoW, photoH);
+    }
+    ctx.clip();
 
     if (photosArray[i]) {
       ctx.drawImage(photosArray[i], posX, posY, photoW, photoH);
@@ -152,6 +168,7 @@ function drawStrip(ctx, offsetX, photosArray) {
       ctx.textAlign = "center";
       ctx.fillText(`Foto ${i + 1} (9:16)`, posX + photoW / 2, posY + photoH / 2);
     }
+    ctx.restore();
   }
 
   // Banner inferior
@@ -165,7 +182,7 @@ function drawStrip(ctx, offsetX, photosArray) {
   }
 }
 
-// CÁMARA Y MODO KIOSCO
+// CÁMARA Y SECUENCIA AUTOMÁTICA DE FOTOS (3 TOMAS AUTOMÁTICAS)
 async function initWebcam() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -183,14 +200,21 @@ async function startPhotoSession() {
   const btn = document.getElementById('start-session-btn');
   btn.disabled = true;
 
+  // Realizar las 3 tomas automáticamente con 5 segundos de conteo cada una
   for (let i = 1; i <= 3; i++) {
-    await runCountdown(3);
+    await runCountdown(5, `Foto ${i}`);
     const img = captureFrame916();
     capturedShots.push(img);
+
+    // Pausa breve de 2 segundos entre foto y foto (salvo en la última)
+    if (i < 3) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
 
   btn.disabled = false;
   
+  // Generar lienzo final con la plantilla
   const finalCanvas = document.createElement('canvas');
   finalCanvas.width = 1200;
   finalCanvas.height = 1800;
@@ -199,20 +223,20 @@ async function startPhotoSession() {
   
   const finalDataUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
   savePhotoToStorage(finalDataUrl);
-  alert("¡Sesión completada! La foto se guardó en la Galería.");
+  alert("¡Sesión completada! La foto de 3 tomas se guardó en la Galería.");
 }
 
-function runCountdown(seconds) {
+function runCountdown(seconds, label) {
   return new Promise(resolve => {
     const overlay = document.getElementById('countdown-overlay');
     overlay.style.display = 'block';
     let count = seconds;
-    overlay.innerText = count;
+    overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
 
     const timer = setInterval(() => {
       count--;
       if (count > 0) {
-        overlay.innerText = count;
+        overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
       } else {
         clearInterval(timer);
         overlay.style.display = 'none';
@@ -222,7 +246,6 @@ function runCountdown(seconds) {
   });
 }
 
-// CAPTURA RECORTADA A 9:16 VERTICAL
 function captureFrame916() {
   const video = document.getElementById('webcam');
   const tempCanvas = document.createElement('canvas');
@@ -230,7 +253,6 @@ function captureFrame916() {
   const vw = video.videoWidth || 1080;
   const vh = video.videoHeight || 1920;
 
-  // Recorte a relación 9:16
   let cropWidth = vw;
   let cropHeight = vw * (16 / 9);
 
