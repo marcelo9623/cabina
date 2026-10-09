@@ -8,7 +8,7 @@
 </head>
 <body>
   <header>
-    <h1>Cabina Fotográfica</h1>
+    <h1>Cabina Fotográfica Pro</h1>
     <nav>
       <button onclick="showSection('kiosk')">Modo Kiosco</button>
       <button onclick="showSection('templates')">Editor de Plantilla</button>
@@ -37,7 +37,7 @@
         </div>
 
         <div class="kiosk-controls">
-          <button id="start-session-btn" onclick="startPhotoSession()">Iniciar Sesión (3 Fotos)</button>
+          <button id="start-session-btn" onclick="startPhotoSession()">Iniciar Sesión (Espacio / Click)</button>
         </div>
       </div>
     </section>
@@ -49,6 +49,24 @@
       <div class="editor-grid">
         <div class="card">
           <h3>Ajustes Generales</h3>
+          
+          <label>Formato de Foto (Aspect Ratio):</label>
+          <select id="tmpl-aspect-select" onchange="updateTemplateConfig()">
+            <option value="9:16">Vertical (9:16)</option>
+            <option value="16:9">Horizontal (16:9)</option>
+          </select>
+
+          <label>Filtro de Foto:</label>
+          <select id="tmpl-filter-select" onchange="updateTemplateConfig()">
+            <option value="none">Normal (Color)</option>
+            <option value="grayscale(100%)">Blanco y Negro</option>
+            <option value="sepia(100%)">Sepia / Vintage</option>
+            <option value="contrast(130%)">Alto Contraste</option>
+          </select>
+
+          <label>Tiempo Conteo Regresivo (seg):</label>
+          <input type="number" id="tmpl-countdown-input" min="1" max="10" value="5" onchange="updateTemplateConfig()">
+
           <label>Texto / Banner inferior:</label>
           <input type="text" id="tmpl-title-input" placeholder="Texto (ej. Mis 15 Años)" oninput="updateTemplateConfig()">
           
@@ -60,7 +78,7 @@
 
           <label>Forma de las Fotos:</label>
           <select id="tmpl-shape-select" onchange="updateTemplateConfig()">
-            <option value="rect">Rectangular (9:16)</option>
+            <option value="rect">Rectangular</option>
             <option value="rounded">Bordes Redondeados</option>
           </select>
 
@@ -76,16 +94,14 @@
         <div class="card">
           <h3>Posicionamiento y Tamaño de Fotos</h3>
           
-          <!-- CONTROLES AVANZADOS FOTO 1 -->
           <div class="pos-group highlighted-group">
-            <h4>⭐ Foto 1 (Ajuste Personalizado)</h4>
+            <h4>⭐ Foto 1</h4>
             <label>Posición X: <input type="range" id="f1-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
             <label>Posición Y: <input type="range" id="f1-y" min="-100" max="1400" value="60" oninput="updatePhotoPos()"></label>
             <label>Ancho (px): <input type="range" id="f1-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
-            <label>Alto (px): <input type="range" id="f1-h" min="100" max="900" value="924" oninput="updatePhotoPos()"></label>
+            <label>Alto (px): <input type="range" id="f1-h" min="100" max="900" value="292" oninput="updatePhotoPos()"></label>
           </div>
 
-          <!-- CONTROLES FOTO 2 -->
           <div class="pos-group">
             <h4>Foto 2</h4>
             <label>Posición X: <input type="range" id="f2-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
@@ -93,7 +109,6 @@
             <label>Ancho (px): <input type="range" id="f2-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
           </div>
 
-          <!-- CONTROLES FOTO 3 -->
           <div class="pos-group">
             <h4>Foto 3</h4>
             <label>Posición X: <input type="range" id="f3-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
