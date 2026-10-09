@@ -2,22 +2,24 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#111">
-  <title>EMEVE PHOTOBOOTH · Full Gratis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <title>EMEVE PHOTOBOOTH · Studio Pro v3.6</title>
   <meta name="description" content="Cabina fotográfica Emeve gratuita, local y adaptable a PC, iPad y iPhone.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app">
+    <!-- Barra Superior -->
     <header class="top">
       <div class="brand">
         EMEVE <b>PHOTOBOOTH</b>
-        <small style="display:block;font-size:10px;letter-spacing:1.5px;color:#9ca3af;font-weight:600">FULL · GRATIS · ADAPTABLE · v3.6</small>
+        <small>FULL · GRATIS · ADAPTABLE · v3.6</small>
       </div>
       <button class="gear" id="adminBtn" aria-label="Configuración">⚙️</button>
     </header>
 
+    <!-- PANTALLA 1: INICIO -->
     <section id="home" class="screen active home">
       <video id="homeVideo" class="homeLive" autoplay muted playsinline aria-label="Vista en vivo de la cámara"></video>
       <div class="homeShade" aria-hidden="true"></div>
@@ -29,6 +31,7 @@
       </div>
     </section>
 
+    <!-- PANTALLA 2: CAPTURA (Diseño idéntico a la segunda imagen) -->
     <section id="capture" class="screen">
       <div class="camera">
         <div class="captureLayout">
@@ -54,6 +57,7 @@
 
     <div id="flash" aria-hidden="true"></div>
 
+    <!-- PANTALLA 3: RESULTADO -->
     <section id="result" class="screen result">
       <div class="resultBox">
         <h2>RESULTADO</h2>
@@ -66,6 +70,7 @@
       </div>
     </section>
 
+    <!-- PANTALLA 4: AJUSTES / CONFIGURACIÓN -->
     <section id="settings" class="screen settings">
       <div class="settingsGrid">
         <div class="card">
@@ -84,7 +89,6 @@
               <option value="duplicate">Tira derecha = copia de la izquierda</option>
               <option value="independent">Dos tiras independientes</option>
             </select>
-            <p style="color:#888;font-size:12px">Todas las medidas son en pulgadas. 4×6 = 10,16 × 15,24 cm (1200 × 1800 px a 300 DPI). 2×6 = 5,08 × 15,24 cm (600 × 1800 px a 300 DPI). En papel 4×6, las dos tiras 2×6 van lado a lado y cada tira mide la mitad exacta del ancho.</p>
           </div>
           <div class="field">
             <label>Cuenta regresiva entre fotos</label>
@@ -95,16 +99,9 @@
             </select>
           </div>
           <div class="field">
-            <label>Fotos por sesión</label>
-            <select id="photos" disabled>
-              <option value="3">3 fotos</option>
-            </select>
-          </div>
-          <div class="field">
             <label>Nombre del evento</label>
             <input id="event" placeholder="Ej. Matrimonio Juan y María">
           </div>
-          <p style="color:#888;font-size:13px">Cada sesión toma 3 fotos originales de 1920×1080. Para impresión, la app prepara el archivo a 300 DPI: 4×6 pulgadas = 1200×1800 px; tira 2×6 = 600×1800 px. Al imprimir, selecciona tamaño real/100 % y desactiva 'ajustar a página' si el controlador lo permite.</p>
         </div>
 
         <div class="card">
@@ -130,12 +127,10 @@
             <input id="frame" type="file" accept="image/*">
           </div>
           <button class="secondary" id="clearFrame">Quitar marco</button>
-          <p style="color:#888;font-size:13px">Puedes cargar un PNG/JPG transparente como marco decorativo. La imagen se guarda en este navegador.</p>
         </div>
 
         <div class="card">
           <h3>Plantilla: asignación de fotos</h3>
-          <p style="color:#aaa;font-size:13px">Cada marco puede mostrar Foto 1, Foto 2 o Foto 3. En 2 tiras 2×6 la plantilla parte con Foto 1, Foto 2, Foto 3 / Foto 1, Foto 2, Foto 3.</p>
           <div id="frameList" class="frameList"></div>
           <button class="secondary" id="addFrame" style="margin-top:10px">+ AGREGAR MARCO</button>
           <button class="primary" id="saveTemplate" style="margin-top:10px">GUARDAR PLANTILLA</button>
@@ -143,12 +138,10 @@
           <button class="secondary" id="importConfig" style="margin-top:8px">IMPORTAR CONFIGURACIÓN</button>
           <input id="configFile" type="file" accept="application/json,.json" class="hidden">
           <button class="secondary" id="closeSettings" style="margin-top:8px">VOLVER A CABINA</button>
-          <p style="color:#888;font-size:13px">La configuración queda guardada en este dispositivo.</p>
         </div>
 
         <div class="card">
           <h3>Vista previa en tiempo real</h3>
-          <p style="color:#aaa;font-size:13px">Mueve X/Y, ancho, alto, texto o colores: la composición se actualiza inmediatamente. Antes de tomar fotos se muestran imágenes de ejemplo.</p>
           <div class="preview">
             <canvas id="designPreview"></canvas>
           </div>
