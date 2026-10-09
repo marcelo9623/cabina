@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cabina Fotográfica Offline</title>
+  <title>Cabina Fotográfica Pro</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -50,10 +50,11 @@
         <div class="card">
           <h3>Ajustes Generales</h3>
           
-          <label>Formato de Foto (Aspect Ratio):</label>
-          <select id="tmpl-aspect-select" onchange="updateTemplateConfig()">
-            <option value="9:16">Vertical (9:16)</option>
-            <option value="16:9">Horizontal (16:9)</option>
+          <label>Cantidad de Fotos por Sesión:</label>
+          <select id="tmpl-shot-count" onchange="updateTemplateConfig()">
+            <option value="1">1 Foto</option>
+            <option value="2">2 Fotos</option>
+            <option value="3" selected>3 Fotos</option>
           </select>
 
           <label>Filtro de Foto:</label>
@@ -92,25 +93,45 @@
         </div>
 
         <div class="card">
-          <h3>Posicionamiento y Tamaño de Fotos</h3>
+          <h3>Posicionamiento y Orientación Individual</h3>
           
-          <div class="pos-group highlighted-group">
+          <!-- FOTO 1 -->
+          <div id="group-f1" class="pos-group highlighted-group">
             <h4>⭐ Foto 1</h4>
+            <label>Orientación:
+              <select id="f1-orient" onchange="updatePhotoPos()">
+                <option value="9:16">Vertical (9:16)</option>
+                <option value="16:9" selected>Horizontal (16:9)</option>
+              </select>
+            </label>
             <label>Posición X: <input type="range" id="f1-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
             <label>Posición Y: <input type="range" id="f1-y" min="-100" max="1400" value="60" oninput="updatePhotoPos()"></label>
             <label>Ancho (px): <input type="range" id="f1-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
-            <label>Alto (px): <input type="range" id="f1-h" min="100" max="900" value="292" oninput="updatePhotoPos()"></label>
           </div>
 
-          <div class="pos-group">
+          <!-- FOTO 2 -->
+          <div id="group-f2" class="pos-group">
             <h4>Foto 2</h4>
+            <label>Orientación:
+              <select id="f2-orient" onchange="updatePhotoPos()">
+                <option value="9:16">Vertical (9:16)</option>
+                <option value="16:9" selected>Horizontal (16:9)</option>
+              </select>
+            </label>
             <label>Posición X: <input type="range" id="f2-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
             <label>Posición Y: <input type="range" id="f2-y" min="-100" max="1400" value="560" oninput="updatePhotoPos()"></label>
             <label>Ancho (px): <input type="range" id="f2-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
           </div>
 
-          <div class="pos-group">
+          <!-- FOTO 3 -->
+          <div id="group-f3" class="pos-group">
             <h4>Foto 3</h4>
+            <label>Orientación:
+              <select id="f3-orient" onchange="updatePhotoPos()">
+                <option value="9:16">Vertical (9:16)</option>
+                <option value="16:9" selected>Horizontal (16:9)</option>
+              </select>
+            </label>
             <label>Posición X: <input type="range" id="f3-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
             <label>Posición Y: <input type="range" id="f3-y" min="-100" max="1400" value="1060" oninput="updatePhotoPos()"></label>
             <label>Ancho (px): <input type="range" id="f3-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
