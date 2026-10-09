@@ -1,6 +1,8 @@
 let currentOverlayImage = null;
 let capturedShots = [];
+let lastGeneratedPhotoUrl = null;
 
+// Configuración de la plantilla con Foto 1 de tamaño/alto libre
 let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
   title: "¡Recuerdo de mi Evento!",
   bgColor: "#ffffff",
@@ -9,9 +11,9 @@ let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
   borderRadius: 20,
   overlayData: null,
   photosPos: [
-    { x: 40, y: 60, w: 520 },
-    { x: 40, y: 560, w: 520 },
-    { x: 40, y: 1060, w: 520 }
+    { x: 40, y: 60, w: 520, h: 924 }, // Foto 1 (Con alto personalizable)
+    { x: 40, y: 560, w: 520 },        // Foto 2
+    { x: 40, y: 1060, w: 520 }        // Foto 3
   ]
 };
 
@@ -37,13 +39,22 @@ function syncInputsWithConfig() {
   document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
 
   const pos = templateConfig.photosPos;
-  ['f1', 'f2', 'f3'].forEach((id, i) => {
-    if (pos[i]) {
-      document.getElementById(`${id}-x`).value = pos[i].x;
-      document.getElementById(`${id}-y`).value = pos[i].y;
-      document.getElementById(`${id}-w`).value = pos[i].w;
-    }
-  });
+  if (pos[0]) {
+    document.getElementById('f1-x').value = pos[0].x;
+    document.getElementById('f1-y').value = pos[0].y;
+    document.getElementById('f1-w').value = pos[0].w;
+    document.getElementById('f1-h').value = pos[0].h || Math.round(pos[0].w * (16 / 9));
+  }
+  if (pos[1]) {
+    document.getElementById('f2-x').value = pos[1].x;
+    document.getElementById('f2-y').value = pos[1].y;
+    document.getElementById('f2-w').value = pos[1].w;
+  }
+  if (pos[2]) {
+    document.getElementById('f3-x').value = pos[2].x;
+    document.getElementById('f3-y').value = pos[2].y;
+    document.getElementById('f3-w').value = pos[2].w;
+  }
 }
 
 function updateTemplateConfig() {
@@ -59,9 +70,22 @@ function updateTemplateConfig() {
 
 function updatePhotoPos() {
   templateConfig.photosPos = [
-    { x: parseInt(document.getElementById('f1-x').value), y: parseInt(document.getElementById('f1-y').value), w: parseInt(document.getElementById('f1-w').value) },
-    { x: parseInt(document.getElementById('f2-x').value), y: parseInt(document.getElementById('f2-y').value), w: parseInt(document.getElementById('f2-w').value) },
-    { x: parseInt(document.getElementById('f3-x').value), y: parseInt(document.getElementById('f3-y').value), w: parseInt(document.getElementById('f3-w').value) }
+    {
+      x: parseInt(document.getElementById('f1-x').value),
+      y: parseInt(document.getElementById('f1-y').value),
+      w: parseInt(document.getElementById('f1-w').value),
+      h: parseInt(document.getElementById('f1-h').value)
+    },
+    {
+      x: parseInt(document.getElementById('f2-x').value),
+      y: parseInt(document.getElementById('f2-y').value),
+      w: parseInt(document.getElementById('f2-w').value)
+    },
+    {
+      x: parseInt(document.getElementById('f3-x').value),
+      y: parseInt(document.getElementById('f3-y').value),
+      w: parseInt(document.getElementById('f3-w').value)
+    }
   ];
 
   saveTemplateConfig();
@@ -117,7 +141,7 @@ function updateTemplatePreview() {
   }
 }
 
-// RENDERIZADO DE PLANTILLA Y MARCOS DIBUJADOS EN TIEMPO REAL
+// RENDERIZADO DEL LIENZO
 function drawLayout(canvas, photosArray) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = templateConfig.bgColor;
@@ -126,7 +150,7 @@ function drawLayout(canvas, photosArray) {
   drawStrip(ctx, 0, photosArray);   // Tira 1
   drawStrip(ctx, 600, photosArray); // Tira 2
 
-  // Línea de corte
+  // Línea punteada de corte
   ctx.setLineDash([10, 10]);
   ctx.beginPath();
   ctx.moveTo(600, 0);
@@ -142,14 +166,14 @@ function drawStrip(ctx, offsetX, photosArray) {
   for (let i = 0; i < 3; i++) {
     const pos = templateConfig.photosPos[i];
     const photoW = pos.w;
-    const photoH = photoW * (16 / 9);
+    // Si la Foto 1 tiene alto personalizado 'h', usarlo. Si no, calcular el estándar 9:16
+    const photoH = pos.h ? pos.h : photoW * (16 / 9);
     const posX = offsetX + pos.x;
     const posY = pos.y;
 
     ctx.save();
     ctx.beginPath();
 
-    // Aplicar forma (Rectangular o Bordes Redondeados)
     if (templateConfig.shape === 'rounded') {
       const r = templateConfig.borderRadius;
       ctx.roundRect(posX, posY, photoW, photoH, r);
@@ -166,7 +190,7 @@ function drawStrip(ctx, offsetX, photosArray) {
       ctx.fillStyle = "#888888";
       ctx.font = "28px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(`Foto ${i + 1} (9:16)`, posX + photoW / 2, posY + photoH / 2);
+      ctx.fillText(`Foto ${i + 1}`, posX + photoW / 2, posY + photoH / 2);
     }
     ctx.restore();
   }
@@ -182,7 +206,7 @@ function drawStrip(ctx, offsetX, photosArray) {
   }
 }
 
-// CÁMARA Y SECUENCIA AUTOMÁTICA DE FOTOS (3 TOMAS AUTOMÁTICAS)
+// MODO KIOSCO Y SESIÓN DE FOTOS
 async function initWebcam() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -200,13 +224,11 @@ async function startPhotoSession() {
   const btn = document.getElementById('start-session-btn');
   btn.disabled = true;
 
-  // Realizar las 3 tomas automáticamente con 5 segundos de conteo cada una
   for (let i = 1; i <= 3; i++) {
     await runCountdown(5, `Foto ${i}`);
     const img = captureFrame916();
     capturedShots.push(img);
 
-    // Pausa breve de 2 segundos entre foto y foto (salvo en la última)
     if (i < 3) {
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -214,16 +236,20 @@ async function startPhotoSession() {
 
   btn.disabled = false;
   
-  // Generar lienzo final con la plantilla
+  // Crear lienzo final
   const finalCanvas = document.createElement('canvas');
   finalCanvas.width = 1200;
   finalCanvas.height = 1800;
   
   drawLayout(finalCanvas, capturedShots);
   
-  const finalDataUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
-  savePhotoToStorage(finalDataUrl);
-  alert("¡Sesión completada! La foto de 3 tomas se guardó en la Galería.");
+  lastGeneratedPhotoUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
+  
+  // Guardar automáticamente en el almacenamiento local
+  savePhotoToStorage(lastGeneratedPhotoUrl);
+  
+  // Mostrar pantalla modal para Imprimir o Compartir
+  showResultModal(lastGeneratedPhotoUrl);
 }
 
 function runCountdown(seconds, label) {
@@ -270,7 +296,6 @@ function captureFrame916() {
 
   ctx.translate(tempCanvas.width, 0);
   ctx.scale(-1, 1);
-  
   ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 
   const img = new Image();
@@ -278,10 +303,50 @@ function captureFrame916() {
   return img;
 }
 
+// GUARDADO AUTOMÁTICO, IMPRESIÓN Y COMPARTIR
 function savePhotoToStorage(dataUrl) {
   const existingPhotos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
   existingPhotos.push({ id: Date.now(), data: dataUrl, date: new Date().toLocaleString() });
   localStorage.setItem('pb_photos_gallery', JSON.stringify(existingPhotos));
+}
+
+function showResultModal(dataUrl) {
+  document.getElementById('result-preview-img').src = dataUrl;
+  document.getElementById('result-modal').style.display = 'flex';
+}
+
+function closeResultModal() {
+  document.getElementById('result-modal').style.display = 'none';
+}
+
+function printCurrentPhoto() {
+  if (!lastGeneratedPhotoUrl) return;
+  printPhoto(lastGeneratedPhotoUrl);
+}
+
+async function shareCurrentPhoto() {
+  if (!lastGeneratedPhotoUrl) return;
+
+  try {
+    const blob = await (await fetch(lastGeneratedPhotoUrl)).blob();
+    const file = new File([blob], `fotocabina_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: 'Mi Tira de Fotos',
+        text: '¡Mira mi foto tomada en la cabina!',
+        files: [file]
+      });
+    } else {
+      // Descarga automática como alternativa si el dispositivo no soporta Web Share
+      const a = document.createElement('a');
+      a.href = lastGeneratedPhotoUrl;
+      a.download = `fotocabina_${Date.now()}.jpg`;
+      a.click();
+    }
+  } catch (err) {
+    console.error("Error al compartir:", err);
+  }
 }
 
 function renderGallery() {
