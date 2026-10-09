@@ -40,6 +40,7 @@ function showSection(sectionId) {
   document.getElementById(`sec-${sectionId}`).classList.add('active');
   if (sectionId === 'templates') updateTemplatePreview();
   if (sectionId === 'gallery') renderGallery();
+  if (sectionId === 'kiosk') initWebcam(); // Re-inicializar si fuera necesario
 }
 
 function syncInputsWithConfig() {
@@ -70,7 +71,6 @@ function togglePhotoGroupsVisibility() {
   document.getElementById('group-f2').style.display = count >= 2 ? 'block' : 'none';
   document.getElementById('group-f3').style.display = count >= 3 ? 'block' : 'none';
   
-  // Actualizar texto del botón Kiosco
   document.getElementById('start-session-btn').innerText = `Iniciar Sesión (${count} Foto${count > 1 ? 's' : ''})`;
 }
 
@@ -84,7 +84,8 @@ function updateTemplateConfig() {
   templateConfig.shape = document.getElementById('tmpl-shape-select').value;
   templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
 
-  document.getElementById('webcam').style.filter = templateConfig.filter;
+  const video = document.getElementById('webcam');
+  if (video) video.style.filter = templateConfig.filter;
 
   togglePhotoGroupsVisibility();
   saveTemplateConfig();
@@ -166,7 +167,6 @@ function updateTemplatePreview() {
   }
 }
 
-// RENDERIZADO DEL LIENZO
 function drawLayout(canvas, photosArray) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = templateConfig.bgColor;
@@ -231,18 +231,40 @@ function drawStrip(ctx, offsetX, photosArray) {
   }
 }
 
-// CÁMARA Y CAPTURA
+// CÁMARA ROBUSTA Y ADAPTATIVA (RESUELVE PANTALLA NEGRA)
 async function initWebcam() {
+  const video = document.getElementById('webcam');
+  if (!video) return;
+
+  // Evitar reiniciar si ya hay un flujo funcionando
+  if (video.srcObject && video.srcObject.active) return;
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { width: { ideal: 1920 }, height: { ideal: 1080 } }, 
-      audio: false 
-    });
-    const video = document.getElementById('webcam');
+    const constraints = {
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: "user"
+      },
+      audio: false
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     video.style.filter = templateConfig.filter || "none";
+    await video.play();
   } catch (err) {
-    console.error("Acceso a la cámara denegado o no disponible:", err);
+    console.warn("Intento básico con cámara por defecto...", err);
+    try {
+      // Fallback a cualquier cámara disponible sin restricciones
+      const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = fallbackStream;
+      video.style.filter = templateConfig.filter || "none";
+      await video.play();
+    } catch (fallbackErr) {
+      console.error("Error fatal al acceder a la webcam:", fallbackErr);
+      alert("No se detectó cámara web disponible. Verifica que la cámara esté conectada y hayas concedido permisos en el navegador.");
+    }
   }
 }
 
@@ -257,7 +279,6 @@ async function startPhotoSession() {
   for (let i = 1; i <= totalShots; i++) {
     await runCountdown(seconds, `Foto ${i}`);
     
-    // Obtener la orientación configurada para esta foto en específico
     const currentOrient = templateConfig.photosPos[i - 1].orient;
     const img = captureFrameByOrientation(currentOrient);
     capturedShots.push(img);
@@ -304,8 +325,8 @@ function captureFrameByOrientation(orient) {
   const video = document.getElementById('webcam');
   const tempCanvas = document.createElement('canvas');
   
-  const vw = video.videoWidth || 1920;
-  const vh = video.videoHeight || 1080;
+  const vw = video.videoWidth || 1280;
+  const vh = video.videoHeight || 720;
 
   const is916 = orient === "9:16";
   const ratio = is916 ? (9 / 16) : (16 / 9);
