@@ -22,6 +22,20 @@
       <div class="kiosk-container">
         <video id="webcam" autoplay playsinline></video>
         <div id="countdown-overlay"></div>
+        
+        <!-- PANTALLA POST-SESIÓN (IMPRIMIR Y COMPARTIR) -->
+        <div id="result-modal" class="result-modal" style="display: none;">
+          <div class="result-content">
+            <h2>¡Tu Tira de Fotos está Lista!</h2>
+            <img id="result-preview-img" src="" alt="Resultado 4x6">
+            <div class="result-actions">
+              <button onclick="printCurrentPhoto()" class="btn-print">🖨️ Imprimir</button>
+              <button onclick="shareCurrentPhoto()" class="btn-share">📲 Compartir / Descargar</button>
+              <button onclick="closeResultModal()" class="btn-secondary">🔄 Nueva Sesión</button>
+            </div>
+          </div>
+        </div>
+
         <div class="kiosk-controls">
           <button id="start-session-btn" onclick="startPhotoSession()">Iniciar Sesión (3 Fotos)</button>
         </div>
@@ -30,7 +44,7 @@
 
     <!-- EDITOR DE PLANTILLAS -->
     <section id="sec-templates">
-      <h2>Editor de Plantilla (2 Tiras 2x6" en Hoja 4x6")</h2>
+      <h2>Editor de Plantilla Personalizable (Tira 2x6" en Hoja 4x6")</h2>
       
       <div class="editor-grid">
         <div class="card">
@@ -60,32 +74,36 @@
         </div>
 
         <div class="card">
-          <h3>Posición y Tamaño (Formato 9:16)</h3>
+          <h3>Posicionamiento y Tamaño de Fotos</h3>
           
-          <div class="pos-group">
-            <h4>Foto 1</h4>
-            <label>Posición X: <input type="range" id="f1-x" min="0" max="300" value="40" oninput="updatePhotoPos()"></label>
-            <label>Posición Y: <input type="range" id="f1-y" min="0" max="1200" value="60" oninput="updatePhotoPos()"></label>
-            <label>Ancho (px): <input type="range" id="f1-w" min="200" max="550" value="520" oninput="updatePhotoPos()"></label>
+          <!-- CONTROLES AVANZADOS FOTO 1 -->
+          <div class="pos-group highlighted-group">
+            <h4>⭐ Foto 1 (Ajuste Personalizado)</h4>
+            <label>Posición X: <input type="range" id="f1-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
+            <label>Posición Y: <input type="range" id="f1-y" min="-100" max="1400" value="60" oninput="updatePhotoPos()"></label>
+            <label>Ancho (px): <input type="range" id="f1-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
+            <label>Alto (px): <input type="range" id="f1-h" min="100" max="900" value="924" oninput="updatePhotoPos()"></label>
           </div>
 
+          <!-- CONTROLES FOTO 2 -->
           <div class="pos-group">
             <h4>Foto 2</h4>
-            <label>Posición X: <input type="range" id="f2-x" min="0" max="300" value="40" oninput="updatePhotoPos()"></label>
-            <label>Posición Y: <input type="range" id="f2-y" min="0" max="1200" value="560" oninput="updatePhotoPos()"></label>
-            <label>Ancho (px): <input type="range" id="f2-w" min="200" max="550" value="520" oninput="updatePhotoPos()"></label>
+            <label>Posición X: <input type="range" id="f2-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
+            <label>Posición Y: <input type="range" id="f2-y" min="-100" max="1400" value="560" oninput="updatePhotoPos()"></label>
+            <label>Ancho (px): <input type="range" id="f2-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
           </div>
 
+          <!-- CONTROLES FOTO 3 -->
           <div class="pos-group">
             <h4>Foto 3</h4>
-            <label>Posición X: <input type="range" id="f3-x" min="0" max="300" value="40" oninput="updatePhotoPos()"></label>
-            <label>Posición Y: <input type="range" id="f3-y" min="0" max="1200" value="1060" oninput="updatePhotoPos()"></label>
-            <label>Ancho (px): <input type="range" id="f3-w" min="200" max="550" value="520" oninput="updatePhotoPos()"></label>
+            <label>Posición X: <input type="range" id="f3-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
+            <label>Posición Y: <input type="range" id="f3-y" min="-100" max="1400" value="1060" oninput="updatePhotoPos()"></label>
+            <label>Ancho (px): <input type="range" id="f3-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
           </div>
         </div>
       </div>
 
-      <h3>Vista Previa en Vivo de la Plantilla (1200x1800 px)</h3>
+      <h3>Vista Previa del Lienzo en Tiempo Real (1200x1800 px)</h3>
       <div class="canvas-container">
         <canvas id="template-canvas" width="1200" height="1800"></canvas>
       </div>
