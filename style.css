@@ -88,7 +88,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   border-radius: 12px;
 }
 
-/* Oculta y Muestra Pantallas */
+/* Pantallas */
 .screen {
   display: none !important;
   flex: 1;
@@ -282,7 +282,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   z-index: 9999;
 }
 
-/* Pantalla Resultado */
+/* Resultado */
 .result {
   align-items: center;
   justify-content: center;
@@ -301,7 +301,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   border-radius: 12px;
 }
 
-/* Pantalla Ajustes */
+/* Ajustes y Edición de Tiras */
 .settings {
   padding: 24px;
   overflow-y: auto;
@@ -346,6 +346,42 @@ input, select {
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 15px;
+}
+
+.frameList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.frameItem {
+  background: #222;
+  border: 1px solid #383838;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.frameItem strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #28a9ff;
+}
+
+.miniGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.danger {
+  background: #9f2323;
+}
+
+.smallBtn {
+  padding: 8px 12px;
+  font-size: 13px;
+  min-height: 36px;
 }
 
 .preview canvas {
