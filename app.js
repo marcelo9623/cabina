@@ -1,16 +1,18 @@
-let activeEvent = null;
 let currentOverlayImage = null;
 let capturedShots = [];
 
-let templateConfig = {
+// Cargar o establecer plantilla predeterminada por defecto
+let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
   title: "¡Recuerdo de mi Evento!",
   bgColor: "#ffffff",
-  textColor: "#000000"
+  textColor: "#000000",
+  overlayData: null
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-  loadEvents();
   initWebcam();
+  syncInputsWithConfig();
+  loadSavedOverlay();
   updateTemplatePreview();
 });
 
@@ -21,74 +23,83 @@ function showSection(sectionId) {
   if (sectionId === 'gallery') renderGallery();
 }
 
-function createEvent() {
-  const input = document.getElementById('event-name-input');
-  const name = input.value.trim();
-  if (!name) return alert("Ingresa un nombre para el evento");
-
-  const events = JSON.parse(localStorage.getItem('pb_events') || '[]');
-  const newEvent = { id: Date.now(), name: name, date: new Date().toLocaleDateString() };
-  events.push(newEvent);
-  localStorage.setItem('pb_events', JSON.stringify(events));
-  
-  input.value = '';
-  selectEvent(newEvent);
-  loadEvents();
+// SINCRONIZAR CAMPOS DEL FORMULARIO CON LA CONFIGURACIÓN GUARDADA
+function syncInputsWithConfig() {
+  document.getElementById('tmpl-title-input').value = templateConfig.title || "";
+  document.getElementById('tmpl-bg-color').value = templateConfig.bgColor || "#ffffff";
+  document.getElementById('tmpl-text-color').value = templateConfig.textColor || "#000000";
 }
 
-function loadEvents() {
-  const events = JSON.parse(localStorage.getItem('pb_events') || '[]');
-  const list = document.getElementById('events-list');
-  list.innerHTML = '';
-  
-  events.forEach(ev => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <span><strong>${ev.name}</strong> (${ev.date})</span>
-      <button onclick='selectEvent(${JSON.stringify(ev)})'>${activeEvent?.id === ev.id ? 'Seleccionado' : 'Seleccionar'}</button>
-    `;
-    list.appendChild(li);
-  });
+function updateTemplateConfig() {
+  templateConfig.title = document.getElementById('tmpl-title-input').value || "";
+  templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
+  templateConfig.textColor = document.getElementById('tmpl-text-color').value;
+
+  saveTemplateConfig();
+  updateTemplatePreview();
 }
 
-function selectEvent(ev) {
-  activeEvent = ev;
-  alert(`Evento activo: ${ev.name}`);
-  loadEvents();
+function saveTemplateConfig() {
+  localStorage.setItem('pb_last_template', JSON.stringify(templateConfig));
 }
 
+// GESTIÓN DEL MARCO / OVERLAY PNG
 function loadOverlay(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    templateConfig.overlayData = dataUrl;
+    saveTemplateConfig();
+    
     const img = new Image();
     img.onload = () => {
       currentOverlayImage = img;
       updateTemplatePreview();
     };
-    img.src = e.target.result;
+    img.src = dataUrl;
   };
   reader.readAsDataURL(file);
 }
 
-function updateTemplatePreview() {
-  templateConfig.title = document.getElementById('tmpl-title-input').value || "¡Recuerdo de mi Evento!";
-  templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
-  templateConfig.textColor = document.getElementById('tmpl-text-color').value;
-
-  const canvas = document.getElementById('template-canvas');
-  drawLayout(canvas, []);
+function loadSavedOverlay() {
+  if (templateConfig.overlayData) {
+    const img = new Image();
+    img.onload = () => {
+      currentOverlayImage = img;
+      updateTemplatePreview();
+    };
+    img.src = templateConfig.overlayData;
+  }
 }
 
+function clearOverlay() {
+  templateConfig.overlayData = null;
+  currentOverlayImage = null;
+  document.getElementById('tmpl-overlay-input').value = "";
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
+
+function updateTemplatePreview() {
+  const canvas = document.getElementById('template-canvas');
+  if (canvas) {
+    drawLayout(canvas, []);
+  }
+}
+
+// DIBUJAR 2 TIRAS 2x6" EN HOJA 4x6" (1200x1800 px)
 function drawLayout(canvas, photosArray) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = templateConfig.bgColor;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // Tira 1 (Izquierda: 0px - 600px) y Tira 2 (Derecha: 600px - 1200px)
   drawStrip(ctx, 0, photosArray);
   drawStrip(ctx, 600, photosArray);
 
+  // Línea punteada de corte
   ctx.setLineDash([10, 10]);
   ctx.beginPath();
   ctx.moveTo(600, 0);
@@ -121,16 +132,19 @@ function drawStrip(ctx, offsetX, photosArray) {
     }
   }
 
+  // Banner o Título inferior
   ctx.fillStyle = templateConfig.textColor;
   ctx.font = "bold 36px sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(templateConfig.title, offsetX + stripWidth / 2, 1550);
 
+  // Marco PNG superpuesto
   if (currentOverlayImage) {
     ctx.drawImage(currentOverlayImage, offsetX, 0, stripWidth, 1800);
   }
 }
 
+// CÁMARA Y MODO KIOSCO
 async function initWebcam() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
@@ -141,8 +155,6 @@ async function initWebcam() {
 }
 
 async function startPhotoSession() {
-  if (!activeEvent) return alert("Por favor, selecciona un evento activo antes de iniciar.");
-  
   capturedShots = [];
   const btn = document.getElementById('start-session-btn');
   btn.disabled = true;
@@ -155,6 +167,7 @@ async function startPhotoSession() {
 
   btn.disabled = false;
   
+  // Procesar tira final con la última plantilla configurada
   const finalCanvas = document.createElement('canvas');
   finalCanvas.width = 1200;
   finalCanvas.height = 1800;
@@ -202,34 +215,30 @@ function captureFrame() {
   return img;
 }
 
+// GUARDADO OFFLINE E IMPRESIÓN
 function savePhotoToStorage(dataUrl) {
-  const storageKey = `pb_photos_${activeEvent.id}`;
-  const existingPhotos = JSON.parse(localStorage.getItem(storageKey) || '[]');
-  existingPhotos.push({ id: Date.now(), data: dataUrl });
-  localStorage.setItem(storageKey, JSON.stringify(existingPhotos));
+  const existingPhotos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
+  existingPhotos.push({ id: Date.now(), data: dataUrl, date: new Date().toLocaleString() });
+  localStorage.setItem('pb_photos_gallery', JSON.stringify(existingPhotos));
 }
 
 function renderGallery() {
   const grid = document.getElementById('gallery-grid');
   grid.innerHTML = '';
 
-  if (!activeEvent) {
-    grid.innerHTML = '<p>Selecciona un evento para ver sus fotos.</p>';
-    return;
-  }
-
-  const photos = JSON.parse(localStorage.getItem(`pb_photos_${activeEvent.id}`) || '[]');
+  const photos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
   if (photos.length === 0) {
-    grid.innerHTML = '<p>No hay fotos en este evento aún.</p>';
+    grid.innerHTML = '<p>No hay fotos tomadas aún.</p>';
     return;
   }
 
-  photos.forEach(p => {
+  photos.reverse().forEach(p => {
     const item = document.createElement('div');
     item.className = 'gallery-item';
     item.innerHTML = `
       <img src="${p.data}" alt="Foto 4x6">
-      <button onclick="printPhoto('${p.data}')">Imprimir / Guardar PNG</button>
+      <small>${p.date}</small>
+      <button onclick="printPhoto('${p.data}')">Imprimir / Descargar</button>
     `;
     grid.appendChild(item);
   });
@@ -243,7 +252,7 @@ function printPhoto(dataUrl) {
         <title>Imprimir Foto 4x6</title>
         <style>
           @page { size: 4in 6in; margin: 0; }
-          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
           img { width: 100%; height: 100%; object-fit: contain; }
         </style>
       </head>
