@@ -10,8 +10,7 @@ section.active { display: block; }
 input[type="text"], button { padding: 10px; border-radius: 4px; border: 1px solid #444; font-size: 1rem; }
 button { background: #28a745; color: white; cursor: pointer; border: none; font-weight: bold; }
 button:hover { opacity: 0.9; }
-ul { list-style: none; }
-li { background: #2a2a2a; padding: 12px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+.btn-danger { background: #dc3545; }
 .canvas-container { display: flex; justify-content: center; margin-top: 15px; }
 canvas { background: #fff; border: 2px solid #555; max-height: 500px; width: auto; border-radius: 4px; }
 .kiosk-container { position: relative; width: 100%; max-width: 800px; margin: 0 auto; background: #000; border-radius: 8px; overflow: hidden; }
