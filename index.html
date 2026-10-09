@@ -17,7 +17,7 @@
   </header>
 
   <main>
-    <!-- MODO KIOSCO DE CAPTURA DE PANTALLA COMPLETA -->
+    <!-- MODO KIOSCO DE CAPTURA -->
     <section id="sec-kiosk" class="active">
       <div class="kiosk-container">
         <video id="webcam" autoplay playsinline></video>
@@ -44,13 +44,23 @@
           <label>Color del Texto:</label>
           <input type="color" id="tmpl-text-color" value="#000000" onchange="updateTemplateConfig()">
 
+          <label>Forma de las Fotos:</label>
+          <select id="tmpl-shape-select" onchange="updateTemplateConfig()">
+            <option value="rect">Rectangular (9:16)</option>
+            <option value="rounded">Bordes Redondeados</option>
+          </select>
+
+          <label>Radio de Bordes Redondeados: 
+            <input type="range" id="tmpl-border-radius" min="0" max="80" value="20" oninput="updateTemplateConfig()">
+          </label>
+
           <label>Marco PNG Transparente (Opcional):</label>
           <input type="file" id="tmpl-overlay-input" accept="image/png" onchange="loadOverlay(event)">
           <button type="button" onclick="clearOverlay()" class="btn-danger">Quitar Marco PNG</button>
         </div>
 
         <div class="card">
-          <h3>Posición y Tamaño de Fotos (Formato 9:16)</h3>
+          <h3>Posición y Tamaño (Formato 9:16)</h3>
           
           <div class="pos-group">
             <h4>Foto 1</h4>
@@ -75,7 +85,7 @@
         </div>
       </div>
 
-      <h3>Vista Previa de la Plantilla (1200x1800 px)</h3>
+      <h3>Vista Previa en Vivo de la Plantilla (1200x1800 px)</h3>
       <div class="canvas-container">
         <canvas id="template-canvas" width="1200" height="1800"></canvas>
       </div>
