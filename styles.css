@@ -18,9 +18,9 @@ button:hover { opacity: 0.9; }
 .canvas-container { display: flex; justify-content: center; margin-top: 15px; }
 canvas { background: #fff; border: 2px solid #555; max-height: 550px; width: auto; border-radius: 4px; }
 
-/* MODO KIOSCO */
-.kiosk-container { position: relative; width: 100%; height: 75vh; min-height: 500px; background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+/* MODO KIOSCO Y VÍDEO FIX */
+.kiosk-container { position: relative; width: 100%; min-height: 500px; height: 75vh; background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); background: #111; display: block; }
 #countdown-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10rem; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 25px #000; display: none; z-index: 10; text-align: center; }
 .kiosk-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 5; }
 #start-session-btn { font-size: 1.5rem; padding: 15px 40px; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
