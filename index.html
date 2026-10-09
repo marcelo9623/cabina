@@ -1,155 +1,297 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111111">
-  <title>EMEVE PHOTOBOOTH · Studio Pro v3.6</title>
-  <meta name="description" content="Cabina fotográfica Emeve gratuita, local y adaptable a PC, iPad y iPhone.">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="app">
-    <!-- Barra Superior -->
-    <header class="top">
-      <div class="brand">
-        EMEVE <b>PHOTOBOOTH</b>
-        <small>FULL · GRATIS · ADAPTABLE · v3.6</small>
-      </div>
-      <button class="gear" id="adminBtn" aria-label="Configuración">⚙️</button>
-    </header>
+// Service Worker para funcionamiento completamente OFFLINE
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.log('Error SW:', err);
+    });
+  });
+}
 
-    <!-- PANTALLA 1: INICIO -->
-    <section id="home" class="screen active home">
-      <video id="homeVideo" class="homeLive" autoplay muted playsinline aria-label="Vista en vivo de la cámara"></video>
-      <div class="homeShade" aria-hidden="true"></div>
-      <div class="homeBox">
-        <h1>EMEVE</h1>
-        <h2>PHOTOBOOTH</h2>
-        <p id="homeEvent">Toca para comenzar</p>
-        <button class="primary" id="begin">TOCAR PARA COMENZAR</button>
-      </div>
-    </section>
+const $ = id => document.getElementById(id);
+let stream = null, shots = [], frame = null;
 
-    <!-- PANTALLA 2: CAPTURA (Diseño idéntico a la segunda imagen) -->
-    <section id="capture" class="screen">
-      <div class="camera">
-        <div class="captureLayout">
-          <aside class="shotRail" id="shotRail" aria-label="Fotos capturadas">
-            <div class="shotThumb" id="thumb1">Foto 1</div>
-            <div class="shotThumb" id="thumb2">Foto 2</div>
-            <div class="shotThumb" id="thumb3">Foto 3</div>
-          </aside>
-          <div class="cameraMain">
-            <div class="videoBox">
-              <video id="video" autoplay muted playsinline></video>
-              <div id="count"></div>
-            </div>
-            <div class="dots" id="dots"></div>
-            <p id="captureStatus" style="text-align:center;color:#aaa">Preparando sesión…</p>
-            <div class="actions">
-              <button class="secondary" id="cancel">Cancelar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+const defaultFrames = [
+  { photo: 1, x: 1.5, y: 7, w: 47, h: 25 },
+  { photo: 2, x: 1.5, y: 37.5, w: 47, h: 25 },
+  { photo: 3, x: 1.5, y: 68, w: 47, h: 25 },
+  { photo: 1, x: 51.5, y: 7, w: 47, h: 25 },
+  { photo: 2, x: 51.5, y: 37.5, w: 47, h: 25 },
+  { photo: 3, x: 51.5, y: 68, w: 47, h: 25 }
+];
 
-    <div id="flash" aria-hidden="true"></div>
+let cfg = JSON.parse(localStorage.getItem('emeveCfg') || 'null') || {
+  format: '2x6x2',
+  stripMode: 'duplicate',
+  delay: 3,
+  photos: 3,
+  event: '',
+  topText: 'EMEVE PHOTOBOOTH',
+  bottomText: 'No hacemos eventos, creamos experiencias',
+  bg: '#ffffff',
+  fg: '#111111',
+  frame: null,
+  frames: defaultFrames
+};
 
-    <!-- PANTALLA 3: RESULTADO -->
-    <section id="result" class="screen result">
-      <div class="resultBox">
-        <h2>RESULTADO</h2>
-        <canvas id="out" class="resultCanvas" aria-label="Vista previa de la composición final"></canvas>
-        <div class="actions" style="margin-top:15px">
-          <button class="primary" id="save">GUARDAR JPG</button>
-          <button class="primary" id="print">IMPRIMIR</button>
-          <button class="secondary" id="again">NUEVA SESIÓN</button>
-        </div>
-      </div>
-    </section>
+cfg.stripMode = cfg.stripMode || 'duplicate';
+if (!Array.isArray(cfg.frames) || !cfg.frames.length) {
+  cfg.frames = JSON.parse(JSON.stringify(defaultFrames));
+}
 
-    <!-- PANTALLA 4: AJUSTES / CONFIGURACIÓN -->
-    <section id="settings" class="screen settings">
-      <div class="settingsGrid">
-        <div class="card">
-          <h3>Captura</h3>
-          <div class="field">
-            <label>Formato de impresión</label>
-            <select id="format">
-              <option value="2x6x2">4×6 pulgadas · 2 tiras de 2×6</option>
-              <option value="4x6">4×6 pulgadas · composición libre</option>
-              <option value="2x6">2×6 pulgadas · una tira</option>
-            </select>
-          </div>
-          <div class="field" id="stripModeField">
-            <label>Distribución de las tiras en 4×6</label>
-            <select id="stripMode">
-              <option value="duplicate">Tira derecha = copia de la izquierda</option>
-              <option value="independent">Dos tiras independientes</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Cuenta regresiva entre fotos</label>
-            <select id="delay">
-              <option value="3">3 segundos</option>
-              <option value="5">5 segundos</option>
-              <option value="10">10 segundos</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Nombre del evento</label>
-            <input id="event" placeholder="Ej. Matrimonio Juan y María">
-          </div>
-        </div>
+function apply() {
+  for (const k of ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg']) {
+    if ($(k)) $(k).value = cfg[k];
+  }
+  if ($('stripMode')) $('stripMode').value = cfg.stripMode || 'duplicate';
+  if ($('stripModeField')) $('stripModeField').style.display = cfg.format === '2x6x2' ? 'block' : 'none';
+  if ($('homeEvent')) $('homeEvent').textContent = cfg.event || 'Toca para comenzar';
+  
+  if (cfg.frame) {
+    let im = new Image();
+    im.onload = () => {
+      frame = im;
+      renderDesignPreview();
+    };
+    im.src = cfg.frame;
+  }
+  renderFrameList();
+  renderDesignPreview();
+}
 
-        <div class="card">
-          <h3>Diseño</h3>
-          <div class="field">
-            <label>Texto superior</label>
-            <input id="topText" value="EMEVE PHOTOBOOTH">
-          </div>
-          <div class="field">
-            <label>Texto inferior</label>
-            <input id="bottomText" value="No hacemos eventos, creamos experiencias">
-          </div>
-          <div class="field">
-            <label>Fondo</label>
-            <input id="bg" type="color" value="#ffffff">
-          </div>
-          <div class="field">
-            <label>Color texto</label>
-            <input id="fg" type="color" value="#111111">
-          </div>
-          <div class="field">
-            <label>Imagen de marco / overlay</label>
-            <input id="frame" type="file" accept="image/*">
-          </div>
-          <button class="secondary" id="clearFrame">Quitar marco</button>
-        </div>
+function saveCfg() {
+  for (const k of ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg']) {
+    if ($(k)) cfg[k] = $(k).value;
+  }
+  if ($('stripMode')) cfg.stripMode = $('stripMode').value;
+  cfg.photos = 3;
+  cfg.frames = readFrameList();
+  cfg.frame = frame ? frame.src : null;
+  localStorage.setItem('emeveCfg', JSON.stringify(cfg));
+  if ($('homeEvent')) $('homeEvent').textContent = cfg.event || 'Toca para comenzar';
+}
 
-        <div class="card">
-          <h3>Plantilla: asignación de fotos</h3>
-          <div id="frameList" class="frameList"></div>
-          <button class="secondary" id="addFrame" style="margin-top:10px">+ AGREGAR MARCO</button>
-          <button class="primary" id="saveTemplate" style="margin-top:10px">GUARDAR PLANTILLA</button>
-          <button class="secondary" id="exportConfig" style="margin-top:8px">EXPORTAR CONFIGURACIÓN</button>
-          <button class="secondary" id="importConfig" style="margin-top:8px">IMPORTAR CONFIGURACIÓN</button>
-          <input id="configFile" type="file" accept="application/json,.json" class="hidden">
-          <button class="secondary" id="closeSettings" style="margin-top:8px">VOLVER A CABINA</button>
-        </div>
+function show(id) {
+  document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+  const target = $(id);
+  if (target) target.classList.add('active');
+}
 
-        <div class="card">
-          <h3>Vista previa en tiempo real</h3>
-          <div class="preview">
-            <canvas id="designPreview"></canvas>
-          </div>
-        </div>
-      </div>
-    </section>
-  </div>
+function dots() {
+  if (!$('dots')) return;
+  $('dots').innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    let d = document.createElement('i');
+    d.className = 'dot ' + (i < shots.length ? 'done' : '');
+    $('dots').appendChild(d);
+    const t = $('thumb' + (i + 1));
+    if (t) {
+      t.classList.toggle('done', i < shots.length);
+      t.innerHTML = i < shots.length 
+        ? '<img alt="Foto ' + (i + 1) + '" src="' + shots[i] + '"><span>Foto ' + (i + 1) + '</span>' 
+        : 'Foto ' + (i + 1);
+    }
+  }
+}
 
-  <script src="app.js"></script>
-</body>
-</html>
+async function camera() {
+  if (!stream) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+  const live = $('homeVideo'), capture = $('video');
+  if (live && live.srcObject !== stream) live.srcObject = stream;
+  if (capture && capture.srcObject !== stream) capture.srcObject = stream;
+  try {
+    if (live) await live.play();
+    if (capture) await capture.play();
+  } catch (e) {}
+  return true;
+}
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function countdown(seconds, n) {
+  $('captureStatus').textContent = 'Preparando Foto ' + n + ' de 3';
+  for (let i = seconds; i > 0; i--) {
+    $('count').style.display = 'flex';
+    $('count').textContent = i;
+    await wait(1000);
+  }
+  $('count').style.display = 'none';
+  $('captureStatus').textContent = '¡FOTO ' + n + '!';
+  await wait(120);
+}
+
+function captureFrame() {
+  const c = document.createElement('canvas');
+  c.width = 1920;
+  c.height = 1080;
+  const v = $('video'), ctx = c.getContext('2d');
+  ctx.save();
+  ctx.translate(1920, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(v, 0, 0, 1920, 1080);
+  ctx.restore();
+  return c.toDataURL('image/jpeg', .95);
+}
+
+async function take() {
+  if (shots.length > 0) return;
+  $('cancel').disabled = true;
+  for (let n = 1; n <= 3; n++) {
+    await countdown(+cfg.delay, n);
+    await wait(35);
+    const photo = captureFrame();
+    shots.push(photo);
+    dots();
+    const f = $('flash');
+    f.style.display = 'block';
+    await wait(130);
+    f.style.display = 'none';
+    if (n < 3) await wait(350);
+  }
+  $('captureStatus').textContent = '¡Sesión terminada!';
+  await wait(450);
+  makeOutput();
+  $('cancel').disabled = false;
+}
+
+function outputSize() {
+  return cfg.format === '2x6' ? { W: 600, H: 1800 } : { W: 1200, H: 1800 };
+}
+
+async function makeOutput() {
+  const { W, H } = outputSize();
+  const c = $('out');
+  c.width = W;
+  c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = cfg.bg;
+  x.fillRect(0, 0, W, H);
+
+  const images = await Promise.all(shots.map(src => new Promise(res => {
+    let im = new Image();
+    im.onload = () => res(im);
+    im.src = src;
+  })));
+
+  let frames = readFrameList();
+  if (cfg.format === '2x6x2' && cfg.stripMode === 'duplicate' && frames.length >= 3) {
+    frames = frames.slice(0, 3).concat(frames.slice(0, 3).map(f => ({ ...f, x: f.x + 50 })));
+  }
+
+  frames.forEach(f => {
+    const im = images[(Math.max(1, Math.min(3, +f.photo || 1))) - 1];
+    const px = W * f.x / 100, py = H * f.y / 100, pw = W * f.w / 100, ph = H * f.h / 100;
+    x.drawImage(im, px, py, pw, ph);
+  });
+
+  if (frame) x.drawImage(frame, 0, 0, W, H);
+  x.fillStyle = cfg.fg;
+  x.textAlign = 'center';
+  if (cfg.topText) {
+    x.font = 'bold 36px Arial';
+    x.fillText(cfg.topText, W / 2, 60);
+  }
+  if (cfg.event) {
+    x.font = 'bold 28px Arial';
+    x.fillText(cfg.event, W / 2, H - 40);
+  }
+  show('result');
+}
+
+function readFrameList() {
+  const nodes = [...document.querySelectorAll('.frameItem')];
+  return nodes.length ? nodes.map(n => ({
+    photo: +n.querySelector('.fp').value,
+    x: +n.querySelector('.fx').value,
+    y: +n.querySelector('.fy').value,
+    w: +n.querySelector('.fw').value,
+    h: +n.querySelector('.fh').value
+  })) : cfg.frames;
+}
+
+function renderFrameList() {
+  const list = $('frameList');
+  if (!list) return;
+  list.innerHTML = '';
+  cfg.frames.forEach((f, i) => {
+    const d = document.createElement('div');
+    d.className = 'frameItem';
+    d.innerHTML = '<strong>Marco ' + (i + 1) + '</strong><div class="field"><select class="fp"><option value="1">Foto 1</option><option value="2">Foto 2</option><option value="3">Foto 3</option></select></div>';
+    list.appendChild(d);
+    d.querySelector('.fp').value = f.photo;
+  });
+}
+
+function renderDesignPreview() {
+  const c = $('designPreview');
+  if (!c) return;
+  const { W, H } = outputSize();
+  c.width = W;
+  c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = $('bg') ? $('bg').value : cfg.bg;
+  x.fillRect(0, 0, W, H);
+}
+
+// Eventos de botones
+$('begin').onclick = async () => {
+  saveCfg();
+  shots = [];
+  dots();
+  if (await camera()) {
+    show('capture');
+    take();
+  } else {
+    alert('Permite el acceso a la cámara para continuar.');
+  }
+};
+
+$('cancel').onclick = () => {
+  shots = [];
+  dots();
+  show('home');
+};
+
+$('again').onclick = () => {
+  shots = [];
+  dots();
+  show('home');
+};
+
+$('adminBtn').onclick = () => {
+  renderFrameList();
+  renderDesignPreview();
+  show('settings');
+};
+
+$('closeSettings').onclick = () => {
+  saveCfg();
+  show('home');
+};
+
+$('saveTemplate').onclick = () => {
+  saveCfg();
+  alert('Configuración guardada.');
+  show('home');
+};
+
+$('save').onclick = () => {
+  let a = document.createElement('a');
+  a.download = 'EMEVE-' + (cfg.event || 'PHOTOBOOTH') + '.jpg';
+  a.href = $('out').toDataURL('image/jpeg', .95);
+  a.click();
+};
+
+$('print').onclick = () => window.print();
+
+apply();
+dots();
+window.addEventListener('load', () => camera().catch(() => {}));
