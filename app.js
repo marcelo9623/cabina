@@ -1,41 +1,422 @@
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-body { background: #121212; color: #fff; padding-bottom: 20px; }
-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 30px; background: #1f1f1f; border-bottom: 2px solid #333; z-index: 100; position: relative; }
-nav button { background: #333; color: white; border: none; padding: 10px 18px; margin-left: 8px; cursor: pointer; border-radius: 4px; font-weight: bold; }
-nav button:hover { background: #007bff; }
-main { padding: 20px; max-width: 1200px; margin: 0 auto; }
-section { display: none; }
-section.active { display: block; }
-.card { background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
-.editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.pos-group { background: #2a2a2a; padding: 12px; border-radius: 6px; margin-top: 5px; }
-.highlighted-group { border: 1px solid #007bff; background: #1a2634; }
-.pos-group label { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 0.9rem; }
-input[type="text"], input[type="number"], select, button { padding: 10px; border-radius: 4px; border: 1px solid #444; font-size: 1rem; background: #2b2b2b; color: #fff; }
-button { background: #28a745; color: white; cursor: pointer; border: none; font-weight: bold; }
-button:hover { opacity: 0.9; }
-.btn-danger { background: #dc3545; }
-.canvas-container { display: flex; justify-content: center; margin-top: 15px; }
-canvas { background: #fff; border: 2px solid #555; max-height: 550px; width: auto; border-radius: 4px; }
+let currentOverlayImage = null;
+let capturedShots = [];
+let lastGeneratedPhotoUrl = null;
 
-/* MODO KIOSCO */
-.kiosk-container { position: relative; width: 100%; height: 75vh; min-height: 500px; background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-#countdown-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10rem; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 25px #000; display: none; z-index: 10; text-align: center; }
-.kiosk-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 5; }
-#start-session-btn { font-size: 1.5rem; padding: 15px 40px; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
+  title: "¡Recuerdo de mi Evento!",
+  bgColor: "#ffffff",
+  textColor: "#000000",
+  shotCount: 3,
+  filter: "none",
+  countdownSec: 5,
+  shape: "rect",
+  borderRadius: 20,
+  overlayData: null,
+  photosPos: [
+    { x: 40, y: 60, w: 520, orient: "16:9" },
+    { x: 40, y: 560, w: 520, orient: "16:9" },
+    { x: 40, y: 1060, w: 520, orient: "16:9" }
+  ]
+};
 
-/* PANTALLA POST-SESIÓN */
-.result-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 50; display: flex; justify-content: center; align-items: center; }
-.result-content { text-align: center; background: #1e1e1e; padding: 25px; border-radius: 12px; max-width: 90%; max-height: 95%; display: flex; flex-direction: column; align-items: center; gap: 15px; overflow-y: auto; }
-.result-content img { max-height: 45vh; border-radius: 6px; border: 2px solid #444; }
-.result-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.btn-print { background: #007bff; font-size: 1.1rem; padding: 12px 24px; }
-.btn-share { background: #17a2b8; font-size: 1.1rem; padding: 12px 24px; }
-.btn-secondary { background: #6c757d; font-size: 1.1rem; padding: 12px 24px; }
+window.addEventListener('DOMContentLoaded', () => {
+  initWebcam();
+  syncInputsWithConfig();
+  loadSavedOverlay();
+  updateTemplatePreview();
 
-/* GALERÍA */
-.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; margin-top: 15px; }
-.gallery-item { background: #222; padding: 10px; border-radius: 6px; text-align: center; }
-.gallery-item img { width: 100%; height: auto; border-radius: 4px; }
-.gallery-item button { margin-top: 8px; width: 100%; background: #17a2b8; }
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && document.getElementById('sec-kiosk').classList.contains('active')) {
+      const modalVisible = document.getElementById('result-modal').style.display === 'flex';
+      if (!modalVisible && !document.getElementById('start-session-btn').disabled) {
+        startPhotoSession();
+      }
+    }
+  });
+});
+
+function showSection(sectionId) {
+  document.querySelectorAll('main > section').forEach(sec => sec.classList.remove('active'));
+  document.getElementById(`sec-${sectionId}`).classList.add('active');
+  if (sectionId === 'templates') updateTemplatePreview();
+  if (sectionId === 'gallery') renderGallery();
+}
+
+function syncInputsWithConfig() {
+  document.getElementById('tmpl-title-input').value = templateConfig.title || "";
+  document.getElementById('tmpl-bg-color').value = templateConfig.bgColor || "#ffffff";
+  document.getElementById('tmpl-text-color').value = templateConfig.textColor || "#000000";
+  document.getElementById('tmpl-shot-count').value = templateConfig.shotCount || 3;
+  document.getElementById('tmpl-filter-select').value = templateConfig.filter || "none";
+  document.getElementById('tmpl-countdown-input').value = templateConfig.countdownSec || 5;
+  document.getElementById('tmpl-shape-select').value = templateConfig.shape || "rect";
+  document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
+
+  const pos = templateConfig.photosPos;
+  ['f1', 'f2', 'f3'].forEach((id, i) => {
+    if (pos[i]) {
+      document.getElementById(`${id}-x`).value = pos[i].x;
+      document.getElementById(`${id}-y`).value = pos[i].y;
+      document.getElementById(`${id}-w`).value = pos[i].w;
+      document.getElementById(`${id}-orient`).value = pos[i].orient || "16:9";
+    }
+  });
+
+  togglePhotoGroupsVisibility();
+}
+
+function togglePhotoGroupsVisibility() {
+  const count = templateConfig.shotCount || 3;
+  document.getElementById('group-f2').style.display = count >= 2 ? 'block' : 'none';
+  document.getElementById('group-f3').style.display = count >= 3 ? 'block' : 'none';
+  
+  // Actualizar texto del botón Kiosco
+  document.getElementById('start-session-btn').innerText = `Iniciar Sesión (${count} Foto${count > 1 ? 's' : ''})`;
+}
+
+function updateTemplateConfig() {
+  templateConfig.title = document.getElementById('tmpl-title-input').value || "";
+  templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
+  templateConfig.textColor = document.getElementById('tmpl-text-color').value;
+  templateConfig.shotCount = parseInt(document.getElementById('tmpl-shot-count').value) || 3;
+  templateConfig.filter = document.getElementById('tmpl-filter-select').value;
+  templateConfig.countdownSec = parseInt(document.getElementById('tmpl-countdown-input').value) || 5;
+  templateConfig.shape = document.getElementById('tmpl-shape-select').value;
+  templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
+
+  document.getElementById('webcam').style.filter = templateConfig.filter;
+
+  togglePhotoGroupsVisibility();
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
+
+function updatePhotoPos() {
+  templateConfig.photosPos = [
+    {
+      x: parseInt(document.getElementById('f1-x').value),
+      y: parseInt(document.getElementById('f1-y').value),
+      w: parseInt(document.getElementById('f1-w').value),
+      orient: document.getElementById('f1-orient').value
+    },
+    {
+      x: parseInt(document.getElementById('f2-x').value),
+      y: parseInt(document.getElementById('f2-y').value),
+      w: parseInt(document.getElementById('f2-w').value),
+      orient: document.getElementById('f2-orient').value
+    },
+    {
+      x: parseInt(document.getElementById('f3-x').value),
+      y: parseInt(document.getElementById('f3-y').value),
+      w: parseInt(document.getElementById('f3-w').value),
+      orient: document.getElementById('f3-orient').value
+    }
+  ];
+
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
+
+function saveTemplateConfig() {
+  localStorage.setItem('pb_last_template', JSON.stringify(templateConfig));
+}
+
+function loadOverlay(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    templateConfig.overlayData = dataUrl;
+    saveTemplateConfig();
+    
+    const img = new Image();
+    img.onload = () => {
+      currentOverlayImage = img;
+      updateTemplatePreview();
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadSavedOverlay() {
+  if (templateConfig.overlayData) {
+    const img = new Image();
+    img.onload = () => {
+      currentOverlayImage = img;
+      updateTemplatePreview();
+    };
+    img.src = templateConfig.overlayData;
+  }
+}
+
+function clearOverlay() {
+  templateConfig.overlayData = null;
+  currentOverlayImage = null;
+  document.getElementById('tmpl-overlay-input').value = "";
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
+
+function updateTemplatePreview() {
+  const canvas = document.getElementById('template-canvas');
+  if (canvas) {
+    drawLayout(canvas, []);
+  }
+}
+
+// RENDERIZADO DEL LIENZO
+function drawLayout(canvas, photosArray) {
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = templateConfig.bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawStrip(ctx, 0, photosArray);   // Tira 1
+  drawStrip(ctx, 600, photosArray); // Tira 2
+
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(600, 0);
+  ctx.lineTo(600, 1800);
+  ctx.strokeStyle = "#cccccc";
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawStrip(ctx, offsetX, photosArray) {
+  const stripWidth = 600;
+  const totalShots = templateConfig.shotCount || 3;
+
+  for (let i = 0; i < totalShots; i++) {
+    const pos = templateConfig.photosPos[i];
+    const photoW = pos.w;
+    const is916 = pos.orient === "9:16";
+    const photoH = is916 ? photoW * (16 / 9) : photoW * (9 / 16);
+
+    const posX = offsetX + pos.x;
+    const posY = pos.y;
+
+    ctx.save();
+    ctx.beginPath();
+
+    if (templateConfig.shape === 'rounded') {
+      const r = templateConfig.borderRadius;
+      ctx.roundRect(posX, posY, photoW, photoH, r);
+    } else {
+      ctx.rect(posX, posY, photoW, photoH);
+    }
+    ctx.clip();
+
+    if (photosArray[i]) {
+      ctx.drawImage(photosArray[i], posX, posY, photoW, photoH);
+    } else {
+      ctx.fillStyle = "#e0e0e0";
+      ctx.fillRect(posX, posY, photoW, photoH);
+      ctx.fillStyle = "#888888";
+      ctx.font = "26px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`Foto ${i + 1} (${pos.orient})`, posX + photoW / 2, posY + photoH / 2);
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle = templateConfig.textColor;
+  ctx.font = "bold 36px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(templateConfig.title, offsetX + stripWidth / 2, 1650);
+
+  if (currentOverlayImage) {
+    ctx.drawImage(currentOverlayImage, offsetX, 0, stripWidth, 1800);
+  }
+}
+
+// CÁMARA Y CAPTURA
+async function initWebcam() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { width: { ideal: 1920 }, height: { ideal: 1080 } }, 
+      audio: false 
+    });
+    const video = document.getElementById('webcam');
+    video.srcObject = stream;
+    video.style.filter = templateConfig.filter || "none";
+  } catch (err) {
+    console.error("Acceso a la cámara denegado o no disponible:", err);
+  }
+}
+
+async function startPhotoSession() {
+  capturedShots = [];
+  const btn = document.getElementById('start-session-btn');
+  btn.disabled = true;
+
+  const seconds = templateConfig.countdownSec || 5;
+  const totalShots = templateConfig.shotCount || 3;
+
+  for (let i = 1; i <= totalShots; i++) {
+    await runCountdown(seconds, `Foto ${i}`);
+    
+    // Obtener la orientación configurada para esta foto en específico
+    const currentOrient = templateConfig.photosPos[i - 1].orient;
+    const img = captureFrameByOrientation(currentOrient);
+    capturedShots.push(img);
+
+    if (i < totalShots) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+
+  btn.disabled = false;
+  
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = 1200;
+  finalCanvas.height = 1800;
+  
+  drawLayout(finalCanvas, capturedShots);
+  
+  lastGeneratedPhotoUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
+  savePhotoToStorage(lastGeneratedPhotoUrl);
+  showResultModal(lastGeneratedPhotoUrl);
+}
+
+function runCountdown(seconds, label) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('countdown-overlay');
+    overlay.style.display = 'block';
+    let count = seconds;
+    overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
+
+    const timer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
+      } else {
+        clearInterval(timer);
+        overlay.style.display = 'none';
+        resolve();
+      }
+    }, 1000);
+  });
+}
+
+function captureFrameByOrientation(orient) {
+  const video = document.getElementById('webcam');
+  const tempCanvas = document.createElement('canvas');
+  
+  const vw = video.videoWidth || 1920;
+  const vh = video.videoHeight || 1080;
+
+  const is916 = orient === "9:16";
+  const ratio = is916 ? (9 / 16) : (16 / 9);
+
+  let cropWidth = vw;
+  let cropHeight = vw / ratio;
+
+  if (cropHeight > vh) {
+    cropHeight = vh;
+    cropWidth = vh * ratio;
+  }
+
+  const cropX = (vw - cropWidth) / 2;
+  const cropY = (vh - cropHeight) / 2;
+
+  tempCanvas.width = cropWidth;
+  tempCanvas.height = cropHeight;
+  const ctx = tempCanvas.getContext('2d');
+
+  ctx.filter = templateConfig.filter || "none";
+
+  ctx.translate(tempCanvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+  const img = new Image();
+  img.src = tempCanvas.toDataURL('image/jpeg');
+  return img;
+}
+
+function savePhotoToStorage(dataUrl) {
+  const existingPhotos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
+  existingPhotos.push({ id: Date.now(), data: dataUrl, date: new Date().toLocaleString() });
+  localStorage.setItem('pb_photos_gallery', JSON.stringify(existingPhotos));
+}
+
+function showResultModal(dataUrl) {
+  document.getElementById('result-preview-img').src = dataUrl;
+  document.getElementById('result-modal').style.display = 'flex';
+}
+
+function closeResultModal() {
+  document.getElementById('result-modal').style.display = 'none';
+}
+
+function printCurrentPhoto() {
+  if (!lastGeneratedPhotoUrl) return;
+  printPhoto(lastGeneratedPhotoUrl);
+}
+
+async function shareCurrentPhoto() {
+  if (!lastGeneratedPhotoUrl) return;
+
+  try {
+    const blob = await (await fetch(lastGeneratedPhotoUrl)).blob();
+    const file = new File([blob], `fotocabina_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: 'Mi Tira de Fotos',
+        text: '¡Mira mi foto tomada en la cabina!',
+        files: [file]
+      });
+    } else {
+      const a = document.createElement('a');
+      a.href = lastGeneratedPhotoUrl;
+      a.download = `fotocabina_${Date.now()}.jpg`;
+      a.click();
+    }
+  } catch (err) {
+    console.error("Error al compartir:", err);
+  }
+}
+
+function renderGallery() {
+  const grid = document.getElementById('gallery-grid');
+  grid.innerHTML = '';
+
+  const photos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
+  if (photos.length === 0) {
+    grid.innerHTML = '<p>No hay fotos tomadas aún.</p>';
+    return;
+  }
+
+  photos.reverse().forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'gallery-item';
+    item.innerHTML = `
+      <img src="${p.data}" alt="Foto 4x6">
+      <small>${p.date}</small>
+      <button onclick="printPhoto('${p.data}')">Imprimir / Descargar</button>
+    `;
+    grid.appendChild(item);
+  });
+}
+
+function printPhoto(dataUrl) {
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Imprimir Foto 4x6</title>
+        <style>
+          @page { size: 4in 6in; margin: 0; }
+          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
+          img { width: 100%; height: 100%; object-fit: contain; }
+        </style>
+      </head>
+      <body>
+        <img src="${dataUrl}" onload="window.print(); window.close();">
+      </body>
+    </html>
+  `);
+}
