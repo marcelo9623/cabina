@@ -8,52 +8,17 @@
 </head>
 <body>
   <header>
-    <h1>Cabina Fotográfica Offline</h1>
+    <h1>Cabina Fotográfica</h1>
     <nav>
-      <button onclick="showSection('events')">Eventos</button>
-      <button onclick="showSection('templates')">Plantillas</button>
       <button onclick="showSection('kiosk')">Modo Kiosco</button>
+      <button onclick="showSection('templates')">Editor de Plantilla</button>
       <button onclick="showSection('gallery')">Galería</button>
     </nav>
   </header>
 
   <main>
-    <!-- GESTIÓN DE EVENTOS -->
-    <section id="sec-events" class="active">
-      <h2>Gestión de Eventos</h2>
-      <div class="card">
-        <input type="text" id="event-name-input" placeholder="Nombre del Evento (ej. Boda Juan y Maria)">
-        <button onclick="createEvent()">Crear Evento</button>
-      </div>
-      <h3>Eventos Guardados</h3>
-      <ul id="events-list"></ul>
-    </section>
-
-    <!-- EDITOR DE PLANTILLAS -->
-    <section id="sec-templates">
-      <h2>Editor de Plantillas (Doble tira 2x6" en hoja 4x6")</h2>
-      <div class="card">
-        <label>Título / Banner:</label>
-        <input type="text" id="tmpl-title-input" placeholder="Texto (ej. Mis 15 Años)" oninput="updateTemplatePreview()">
-        
-        <label>Color de Fondo:</label>
-        <input type="color" id="tmpl-bg-color" value="#ffffff" onchange="updateTemplatePreview()">
-        
-        <label>Color del Texto:</label>
-        <input type="color" id="tmpl-text-color" value="#000000" onchange="updateTemplatePreview()">
-
-        <label>Marco de Fotos (PNG Transparente Opcional):</label>
-        <input type="file" id="tmpl-overlay-input" accept="image/png" onchange="loadOverlay(event)">
-      </div>
-
-      <h3>Vista Previa del Lienzo 4x6" (1200x1800 px)</h3>
-      <div class="canvas-container">
-        <canvas id="template-canvas" width="1200" height="1800"></canvas>
-      </div>
-    </section>
-
-    <!-- MODO KIOSCO DE CAPTURA -->
-    <section id="sec-kiosk">
+    <!-- MODO KIOSCO DE CAPTURA (SECCIÓN PRINCIPAL) -->
+    <section id="sec-kiosk" class="active">
       <div class="kiosk-container">
         <div id="countdown-overlay"></div>
         <video id="webcam" autoplay playsinline></video>
@@ -63,9 +28,33 @@
       </div>
     </section>
 
+    <!-- EDITOR DE PLANTILLAS -->
+    <section id="sec-templates">
+      <h2>Editor de Plantilla (Doble tira 2x6" en hoja 4x6")</h2>
+      <div class="card">
+        <label>Texto / Banner inferior:</label>
+        <input type="text" id="tmpl-title-input" placeholder="Texto (ej. Mis 15 Años)" oninput="updateTemplateConfig()">
+        
+        <label>Color de Fondo:</label>
+        <input type="color" id="tmpl-bg-color" value="#ffffff" onchange="updateTemplateConfig()">
+        
+        <label>Color del Texto:</label>
+        <input type="color" id="tmpl-text-color" value="#000000" onchange="updateTemplateConfig()">
+
+        <label>Marco / Overlay PNG Transparente (Opcional):</label>
+        <input type="file" id="tmpl-overlay-input" accept="image/png" onchange="loadOverlay(event)">
+        <button type="button" onclick="clearOverlay()" class="btn-danger">Quitar Marco PNG</button>
+      </div>
+
+      <h3>Vista Previa del Lienzo 4x6" (1200x1800 px)</h3>
+      <div class="canvas-container">
+        <canvas id="template-canvas" width="1200" height="1800"></canvas>
+      </div>
+    </section>
+
     <!-- GALERÍA Y REVISIÓN / IMPRESIÓN -->
     <section id="sec-gallery">
-      <h2>Galería de Fotos del Evento</h2>
+      <h2>Galería de Fotos Capturadas</h2>
       <div id="gallery-grid" class="gallery-grid"></div>
     </section>
   </main>
