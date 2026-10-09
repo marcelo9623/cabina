@@ -1,452 +1,93 @@
-let currentOverlayImage = null;
-let capturedShots = [];
-let lastGeneratedPhotoUrl = null;
-
-let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
-  title: "¡Recuerdo de mi Evento!",
-  bgColor: "#ffffff",
-  textColor: "#000000",
-  shotCount: 3,
-  filter: "none",
-  countdownSec: 5,
-  shape: "rect",
-  borderRadius: 20,
-  overlayData: null,
-  photosPos: [
-    { x: 40, y: 60, w: 520, orient: "16:9" },
-    { x: 40, y: 560, w: 520, orient: "16:9" },
-    { x: 40, y: 1060, w: 520, orient: "16:9" }
-  ]
-};
-
-window.addEventListener('DOMContentLoaded', () => {
-  initWebcam();
-  syncInputsWithConfig();
-  loadSavedOverlay();
-  updateTemplatePreview();
-
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && document.getElementById('sec-kiosk').classList.contains('active')) {
-      const modalVisible = document.getElementById('result-modal').style.display === 'flex';
-      if (!modalVisible && !document.getElementById('start-session-btn').disabled) {
-        startPhotoSession();
-      }
+<!doctype html>
+<html lang='es'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'>
+  <meta name='theme-color' content='#111'>
+  <title>EMEVE PHOTOBOOTH · Full Pro v3.7</title>
+  <meta name="description" content="Cabina fotográfica Emeve gratuita, local y adaptable a PC, iPad y iPhone.">
+  <style>
+    *{box-sizing:border-box}
+    html{min-height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;min-width:320px;background:#101010;color:#fff;font-family:Arial,sans-serif;overscroll-behavior-y:contain}
+    button,input,select{font:inherit}
+    button{border:0;border-radius:14px;padding:13px 17px;color:#fff;background:#252525;min-height:44px;touch-action:manipulation;cursor:pointer}
+    button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #28a9ff;outline-offset:2px}
+    .app{min-height:100vh;min-height:100svh;min-height:100dvh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+    .top{min-height:64px;padding:10px max(18px,env(safe-area-inset-left)) 10px max(18px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #292929;background:#151515;flex-shrink:0}
+    .brand{font-size:clamp(16px,2.5vw,21px);font-weight:800;letter-spacing:.5px}
+    .brand b{color:#28a9ff}
+    .gear{font-size:22px;min-width:44px}
+    .screen{display:none;flex:1;min-width:0}
+    .screen.active{display:flex}
+    .home{position:relative;isolation:isolate;overflow:hidden;align-items:center;justify-content:center;text-align:center;padding:clamp(16px,4vw,40px);min-height:calc(100dvh - 64px);background:#080808}
+    .homeLive{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:-2}
+    .homeShade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.25),rgba(0,0,0,.5) 45%,rgba(0,0,0,.72));z-index:-1}
+    .homeBox{max-width:650px;width:min(100%,650px);padding:clamp(20px,4vw,42px);border:1px solid #ffffff38;border-radius:28px;background:rgba(8,8,8,.28);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);text-shadow:0 2px 18px #000}
+    .home h1{font-size:clamp(40px,8vw,78px);margin:0 0 8px}
+    .home h2{font-size:clamp(22px,4vw,36px);margin:0 0 22px;letter-spacing:.12em}
+    .home p{color:#fff;font-size:clamp(18px,3vw,26px);font-weight:600;margin:0 0 24px}
+    .primary{background:#147fe3;font-size:clamp(16px,2.5vw,20px);padding:17px 28px;font-weight:bold}
+    .secondary{background:#333;font-weight:bold}
+    .danger{background:#9f2323}
+    .camera{width:min(1300px,100%);margin:auto;padding:clamp(8px,1.5vw,16px)}
+    .captureLayout{display:grid;grid-template-columns:clamp(100px,18vw,220px) minmax(0,1fr);gap:clamp(8px,1.5vw,16px);align-items:start}
+    .stripSidebar{background:#181818;border:1px solid #303030;border-radius:14px;padding:10px;display:flex;flex-direction:column;align-items:center;min-width:0}
+    .stripSidebar h4{margin:0 0 8px;font-size:12px;color:#aaa;text-transform:uppercase;letter-spacing:1px}
+    .sidebarCanvasBox{width:100%;aspect-ratio:1/3;display:flex;align-items:center;justify-content:center}
+    #sidebarCanvas{width:100%;height:100%;object-fit:contain;background:#fff;border-radius:6px}
+    .cameraMain{min-width:0}
+    .videoBox{position:relative;background:#000;border-radius:clamp(10px,2vw,20px);overflow:hidden;aspect-ratio:16/9;width:100%;max-height:65dvh}
+    .videoBox video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+    #flash{display:none;position:fixed;inset:0;background:#fff;z-index:9999;pointer-events:none}
+    #count{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:clamp(80px,18vw,180px);font-weight:900;text-shadow:0 4px 25px #000;color:#ffeb3b}
+    .dots{display:flex;justify-content:center;gap:9px;margin:13px}
+    .dot{width:11px;height:11px;border-radius:50%;background:#444}
+    .dot.done{background:#28a9ff}
+    .actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .resultModal{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9000;display:flex;align-items:center;justify-content:center;padding:15px}
+    .resultBox{width:min(760px,100%);background:#181818;border:1px solid #333;border-radius:20px;padding:20px;text-align:center;max-height:95vh;overflow-y:auto}
+    .resultCanvas{background:#fff;max-width:100%;max-height:55dvh;height:auto;width:auto;object-fit:contain;border-radius:10px;border:1px solid #444}
+    .settings{padding:clamp(10px,2.5vw,24px);overflow:auto;overscroll-behavior:contain;min-height:0}
+    .settingsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:clamp(10px,1.5vw,15px);max-width:1400px;margin:auto;align-items:start}
+    .card{background:#181818;border:1px solid #303030;border-radius:18px;padding:clamp(12px,1.5vw,17px);min-width:0}
+    .card h3{margin-top:0}
+    .field{margin:12px 0}
+    .field label{display:block;color:#aaa;font-size:13px;margin-bottom:6px}
+    input,select{width:100%;min-width:0;background:#252525;color:#fff;border:1px solid #444;border-radius:10px;padding:11px;font-size:16px;min-height:44px}
+    input[type=color]{padding:4px;min-height:44px}
+    .frameList{display:grid;gap:10px}
+    .frameItem{background:#202020;border:1px solid #383838;border-radius:12px;padding:10px;min-width:0}
+    .frameItem strong{display:block;margin-bottom:7px}
+    .miniGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+    .smallBtn{padding:8px 10px;border-radius:9px;font-size:13px;min-height:38px}
+    .galleryGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:15px;width:100%;padding:15px}
+    .galleryItem{background:#181818;border:1px solid #303030;border-radius:12px;padding:10px;text-align:center}
+    .galleryItem img{width:100%;height:auto;border-radius:6px}
+    .hidden{display:none}
+    @media(max-width:760px){
+      .captureLayout{grid-template-columns:clamp(75px,20vw,110px) minmax(0,1fr)}
+      .designGrid{grid-template-columns:minmax(0,1fr)}
+      .settingsGrid{grid-template-columns:minmax(0,1fr)}
     }
-  });
-});
+  </style>
+</head>
+<body>
+<div class='app'>
+  <header class='top'>
+    <div class='brand'>EMEVE <b>PHOTOBOOTH</b><small style='display:block;font-size:10px;letter-spacing:1.5px;color:#9ca3af;font-weight:600'>FULL · PRO · v3.7</small></div>
+    <div>
+      <button onclick="showNav('home')">Inicio</button>
+      <button onclick="showNav('gallery')">Galería</button>
+      <button class='gear' id='adminBtn' aria-label='Configuración'>⚙️</button>
+    </div>
+  </header>
 
-function showSection(sectionId) {
-  document.querySelectorAll('main > section').forEach(sec => sec.classList.remove('active'));
-  document.getElementById(`sec-${sectionId}`).classList.add('active');
-  if (sectionId === 'templates') updateTemplatePreview();
-  if (sectionId === 'gallery') renderGallery();
-  if (sectionId === 'kiosk') initWebcam();
-}
-
-function syncInputsWithConfig() {
-  document.getElementById('tmpl-title-input').value = templateConfig.title || "";
-  document.getElementById('tmpl-bg-color').value = templateConfig.bgColor || "#ffffff";
-  document.getElementById('tmpl-text-color').value = templateConfig.textColor || "#000000";
-  document.getElementById('tmpl-shot-count').value = templateConfig.shotCount || 3;
-  document.getElementById('tmpl-filter-select').value = templateConfig.filter || "none";
-  document.getElementById('tmpl-countdown-input').value = templateConfig.countdownSec || 5;
-  document.getElementById('tmpl-shape-select').value = templateConfig.shape || "rect";
-  document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
-
-  const pos = templateConfig.photosPos;
-  ['f1', 'f2', 'f3'].forEach((id, i) => {
-    if (pos[i]) {
-      document.getElementById(`${id}-x`).value = pos[i].x;
-      document.getElementById(`${id}-y`).value = pos[i].y;
-      document.getElementById(`${id}-w`).value = pos[i].w;
-      document.getElementById(`${id}-orient`).value = pos[i].orient || "16:9";
-    }
-  });
-
-  togglePhotoGroupsVisibility();
-}
-
-function togglePhotoGroupsVisibility() {
-  const count = templateConfig.shotCount || 3;
-  document.getElementById('group-f2').style.display = count >= 2 ? 'block' : 'none';
-  document.getElementById('group-f3').style.display = count >= 3 ? 'block' : 'none';
-  
-  document.getElementById('start-session-btn').innerText = `Iniciar Sesión (${count} Foto${count > 1 ? 's' : ''})`;
-}
-
-function updateTemplateConfig() {
-  templateConfig.title = document.getElementById('tmpl-title-input').value || "";
-  templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
-  templateConfig.textColor = document.getElementById('tmpl-text-color').value;
-  templateConfig.shotCount = parseInt(document.getElementById('tmpl-shot-count').value) || 3;
-  templateConfig.filter = document.getElementById('tmpl-filter-select').value;
-  templateConfig.countdownSec = parseInt(document.getElementById('tmpl-countdown-input').value) || 5;
-  templateConfig.shape = document.getElementById('tmpl-shape-select').value;
-  templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
-
-  const video = document.getElementById('webcam');
-  if (video) video.style.filter = templateConfig.filter;
-
-  togglePhotoGroupsVisibility();
-  saveTemplateConfig();
-  updateTemplatePreview();
-}
-
-function updatePhotoPos() {
-  templateConfig.photosPos = [
-    {
-      x: parseInt(document.getElementById('f1-x').value),
-      y: parseInt(document.getElementById('f1-y').value),
-      w: parseInt(document.getElementById('f1-w').value),
-      orient: document.getElementById('f1-orient').value
-    },
-    {
-      x: parseInt(document.getElementById('f2-x').value),
-      y: parseInt(document.getElementById('f2-y').value),
-      w: parseInt(document.getElementById('f2-w').value),
-      orient: document.getElementById('f2-orient').value
-    },
-    {
-      x: parseInt(document.getElementById('f3-x').value),
-      y: parseInt(document.getElementById('f3-y').value),
-      w: parseInt(document.getElementById('f3-w').value),
-      orient: document.getElementById('f3-orient').value
-    }
-  ];
-
-  saveTemplateConfig();
-  updateTemplatePreview();
-}
-
-function saveTemplateConfig() {
-  localStorage.setItem('pb_last_template', JSON.stringify(templateConfig));
-}
-
-function loadOverlay(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const dataUrl = e.target.result;
-    templateConfig.overlayData = dataUrl;
-    saveTemplateConfig();
-    
-    const img = new Image();
-    img.onload = () => {
-      currentOverlayImage = img;
-      updateTemplatePreview();
-    };
-    img.src = dataUrl;
-  };
-  reader.readAsDataURL(file);
-}
-
-function loadSavedOverlay() {
-  if (templateConfig.overlayData) {
-    const img = new Image();
-    img.onload = () => {
-      currentOverlayImage = img;
-      updateTemplatePreview();
-    };
-    img.src = templateConfig.overlayData;
-  }
-}
-
-function clearOverlay() {
-  templateConfig.overlayData = null;
-  currentOverlayImage = null;
-  document.getElementById('tmpl-overlay-input').value = "";
-  saveTemplateConfig();
-  updateTemplatePreview();
-}
-
-function updateTemplatePreview() {
-  const canvas = document.getElementById('template-canvas');
-  if (canvas) {
-    drawLayout(canvas, []);
-  }
-}
-
-// DIBUJAR BORDES REDONDEADOS COMPATIBLES CON TODOS LOS NAVEGADORES
-function drawCustomRoundedRect(ctx, x, y, width, height, radius) {
-  if (radius <= 0) {
-    ctx.rect(x, y, width, height);
-    return;
-  }
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-}
-
-function drawLayout(canvas, photosArray) {
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = templateConfig.bgColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  drawStrip(ctx, 0, photosArray);   // Tira 1
-  drawStrip(ctx, 600, photosArray); // Tira 2
-
-  ctx.setLineDash([10, 10]);
-  ctx.beginPath();
-  ctx.moveTo(600, 0);
-  ctx.lineTo(600, 1800);
-  ctx.strokeStyle = "#cccccc";
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
-
-function drawStrip(ctx, offsetX, photosArray) {
-  const stripWidth = 600;
-  const totalShots = templateConfig.shotCount || 3;
-
-  for (let i = 0; i < totalShots; i++) {
-    const pos = templateConfig.photosPos[i];
-    const photoW = pos.w;
-    const is916 = pos.orient === "9:16";
-    const photoH = is916 ? photoW * (16 / 9) : photoW * (9 / 16);
-
-    const posX = offsetX + pos.x;
-    const posY = pos.y;
-
-    ctx.save();
-    ctx.beginPath();
-
-    if (templateConfig.shape === 'rounded') {
-      drawCustomRoundedRect(ctx, posX, posY, photoW, photoH, templateConfig.borderRadius);
-    } else {
-      ctx.rect(posX, posY, photoW, photoH);
-    }
-    ctx.clip();
-
-    if (photosArray[i]) {
-      ctx.drawImage(photosArray[i], posX, posY, photoW, photoH);
-    } else {
-      ctx.fillStyle = "#e0e0e0";
-      ctx.fillRect(posX, posY, photoW, photoH);
-      ctx.fillStyle = "#888888";
-      ctx.font = "26px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(`Foto ${i + 1} (${pos.orient})`, posX + photoW / 2, posY + photoH / 2);
-    }
-    ctx.restore();
-  }
-
-  ctx.fillStyle = templateConfig.textColor;
-  ctx.font = "bold 36px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(templateConfig.title, offsetX + stripWidth / 2, 1650);
-
-  if (currentOverlayImage) {
-    ctx.drawImage(currentOverlayImage, offsetX, 0, stripWidth, 1800);
-  }
-}
-
-// ACCESO ROBUSTO A LA CÁMARA WEB
-async function initWebcam() {
-  const video = document.getElementById('webcam');
-  if (!video) return;
-
-  if (video.srcObject && video.srcObject.active) return;
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false
-    });
-    video.srcObject = stream;
-    video.style.filter = templateConfig.filter || "none";
-    await video.play();
-  } catch (err) {
-    try {
-      const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      video.srcObject = fallbackStream;
-      video.style.filter = templateConfig.filter || "none";
-      await video.play();
-    } catch (fallbackErr) {
-      console.error("Error al acceder a la cámara:", fallbackErr);
-      alert("Por favor concede acceso a la cámara en tu navegador para continuar.");
-    }
-  }
-}
-
-async function startPhotoSession() {
-  capturedShots = [];
-  const btn = document.getElementById('start-session-btn');
-  btn.disabled = true;
-
-  const seconds = templateConfig.countdownSec || 5;
-  const totalShots = templateConfig.shotCount || 3;
-
-  for (let i = 1; i <= totalShots; i++) {
-    await runCountdown(seconds, `Foto ${i}`);
-    
-    const currentOrient = templateConfig.photosPos[i - 1].orient;
-    const img = captureFrameByOrientation(currentOrient);
-    capturedShots.push(img);
-
-    if (i < totalShots) {
-      await new Promise(r => setTimeout(r, 2000));
-    }
-  }
-
-  btn.disabled = false;
-  
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = 1200;
-  finalCanvas.height = 1800;
-  
-  drawLayout(finalCanvas, capturedShots);
-  
-  lastGeneratedPhotoUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
-  savePhotoToStorage(lastGeneratedPhotoUrl);
-  showResultModal(lastGeneratedPhotoUrl);
-}
-
-function runCountdown(seconds, label) {
-  return new Promise(resolve => {
-    const overlay = document.getElementById('countdown-overlay');
-    overlay.style.display = 'block';
-    let count = seconds;
-    overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
-
-    const timer = setInterval(() => {
-      count--;
-      if (count > 0) {
-        overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
-      } else {
-        clearInterval(timer);
-        overlay.style.display = 'none';
-        resolve();
-      }
-    }, 1000);
-  });
-}
-
-function captureFrameByOrientation(orient) {
-  const video = document.getElementById('webcam');
-  const tempCanvas = document.createElement('canvas');
-  
-  const vw = video.videoWidth || 1280;
-  const vh = video.videoHeight || 720;
-
-  const is916 = orient === "9:16";
-  const ratio = is916 ? (9 / 16) : (16 / 9);
-
-  let cropWidth = vw;
-  let cropHeight = vw / ratio;
-
-  if (cropHeight > vh) {
-    cropHeight = vh;
-    cropWidth = vh * ratio;
-  }
-
-  const cropX = (vw - cropWidth) / 2;
-  const cropY = (vh - cropHeight) / 2;
-
-  tempCanvas.width = cropWidth;
-  tempCanvas.height = cropHeight;
-  const ctx = tempCanvas.getContext('2d');
-
-  ctx.filter = templateConfig.filter || "none";
-
-  ctx.translate(tempCanvas.width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-
-  const img = new Image();
-  img.src = tempCanvas.toDataURL('image/jpeg');
-  return img;
-}
-
-function savePhotoToStorage(dataUrl) {
-  const existingPhotos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
-  existingPhotos.push({ id: Date.now(), data: dataUrl, date: new Date().toLocaleString() });
-  localStorage.setItem('pb_photos_gallery', JSON.stringify(existingPhotos));
-}
-
-function showResultModal(dataUrl) {
-  document.getElementById('result-preview-img').src = dataUrl;
-  document.getElementById('result-modal').style.display = 'flex';
-}
-
-function closeResultModal() {
-  document.getElementById('result-modal').style.display = 'none';
-}
-
-function printCurrentPhoto() {
-  if (!lastGeneratedPhotoUrl) return;
-  printPhoto(lastGeneratedPhotoUrl);
-}
-
-async function shareCurrentPhoto() {
-  if (!lastGeneratedPhotoUrl) return;
-
-  try {
-    const blob = await (await fetch(lastGeneratedPhotoUrl)).blob();
-    const file = new File([blob], `fotocabina_${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: 'Mi Tira de Fotos',
-        text: '¡Mira mi foto tomada en la cabina!',
-        files: [file]
-      });
-    } else {
-      const a = document.createElement('a');
-      a.href = lastGeneratedPhotoUrl;
-      a.download = `fotocabina_${Date.now()}.jpg`;
-      a.click();
-    }
-  } catch (err) {
-    console.error("Error al compartir:", err);
-  }
-}
-
-function renderGallery() {
-  const grid = document.getElementById('gallery-grid');
-  grid.innerHTML = '';
-
-  const photos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
-  if (photos.length === 0) {
-    grid.innerHTML = '<p>No hay fotos tomadas aún.</p>';
-    return;
-  }
-
-  photos.reverse().forEach(p => {
-    const item = document.createElement('div');
-    item.className = 'gallery-item';
-    item.innerHTML = `
-      <img src="${p.data}" alt="Foto 4x6">
-      <small>${p.date}</small>
-      <button onclick="printPhoto('${p.data}')">Imprimir / Descargar</button>
-    `;
-    grid.appendChild(item);
-  });
-}
-
-function printPhoto(dataUrl) {
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>Imprimir Foto 4x6</title>
-        <style>
-          @page { size: 4in 6in; margin: 0; }
-          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
-          img { width: 100%; height: 100%; object-fit: contain; }
-        </style>
-      </head>
-      <body>
-        <img src="${dataUrl}" onload="window.print(); window.close();">
-      </body>
-    </html>
-  `);
-}
+  <!-- PANTALLA DE INICIO -->
+  <section id='home' class='screen active home'>
+    <video id='homeVideo' class='homeLive' autoplay muted playsinline></video>
+    <div class='homeShade' aria-hidden='true'></div>
+    <div class='homeBox'>
+      <h1>EMEVE</h1>
+      <h2>PHOTOBOOTH</h2>
+      <p id='homeEvent'>Toca para comenzar
