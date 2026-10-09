@@ -1,0 +1,24 @@
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif; }
+body { background: #121212; color: #fff; padding-bottom: 20px; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 15px 30px; background: #1f1f1f; border-bottom: 2px solid #333; }
+nav button { background: #333; color: white; border: none; padding: 10px 18px; margin-left: 8px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+nav button:hover { background: #007bff; }
+main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+section { display: none; }
+section.active { display: block; }
+.card { background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
+input[type="text"], button { padding: 10px; border-radius: 4px; border: 1px solid #444; font-size: 1rem; }
+button { background: #28a745; color: white; cursor: pointer; border: none; font-weight: bold; }
+button:hover { opacity: 0.9; }
+ul { list-style: none; }
+li { background: #2a2a2a; padding: 12px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+.canvas-container { display: flex; justify-content: center; margin-top: 15px; }
+canvas { background: #fff; border: 2px solid #555; max-height: 500px; width: auto; border-radius: 4px; }
+.kiosk-container { position: relative; width: 100%; max-width: 800px; margin: 0 auto; background: #000; border-radius: 8px; overflow: hidden; }
+video { width: 100%; height: auto; display: block; transform: scaleX(-1); }
+#countdown-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 8rem; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 20px #000; display: none; z-index: 10; }
+.kiosk-controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 5; }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; margin-top: 15px; }
+.gallery-item { background: #222; padding: 10px; border-radius: 6px; text-align: center; }
+.gallery-item img { width: 100%; height: auto; border-radius: 4px; }
+.gallery-item button { margin-top: 8px; width: 100%; background: #17a2b8; }
