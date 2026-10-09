@@ -1,157 +1,452 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cabina Fotográfica Pro</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <header>
-    <h1>Cabina Fotográfica Pro</h1>
-    <nav>
-      <button onclick="showSection('kiosk')">Modo Kiosco</button>
-      <button onclick="showSection('templates')">Editor de Plantilla</button>
-      <button onclick="showSection('gallery')">Galería</button>
-    </nav>
-  </header>
+let currentOverlayImage = null;
+let capturedShots = [];
+let lastGeneratedPhotoUrl = null;
 
-  <main>
-    <!-- MODO KIOSCO DE CAPTURA -->
-    <section id="sec-kiosk" class="active">
-      <div class="kiosk-container">
-        <video id="webcam" autoplay playsinline muted></video>
-        <div id="countdown-overlay"></div>
-        
-        <!-- PANTALLA POST-SESIÓN -->
-        <div id="result-modal" class="result-modal" style="display: none;">
-          <div class="result-content">
-            <h2>¡Tu Tira de Fotos está Lista!</h2>
-            <img id="result-preview-img" src="" alt="Resultado 4x6">
-            <div class="result-actions">
-              <button onclick="printCurrentPhoto()" class="btn-print">🖨️ Imprimir</button>
-              <button onclick="shareCurrentPhoto()" class="btn-share">📲 Compartir / Descargar</button>
-              <button onclick="closeResultModal()" class="btn-secondary">🔄 Nueva Sesión</button>
-            </div>
-          </div>
-        </div>
+let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
+  title: "¡Recuerdo de mi Evento!",
+  bgColor: "#ffffff",
+  textColor: "#000000",
+  shotCount: 3,
+  filter: "none",
+  countdownSec: 5,
+  shape: "rect",
+  borderRadius: 20,
+  overlayData: null,
+  photosPos: [
+    { x: 40, y: 60, w: 520, orient: "16:9" },
+    { x: 40, y: 560, w: 520, orient: "16:9" },
+    { x: 40, y: 1060, w: 520, orient: "16:9" }
+  ]
+};
 
-        <div class="kiosk-controls">
-          <button id="start-session-btn" onclick="startPhotoSession()">Iniciar Sesión (Espacio / Click)</button>
-        </div>
-      </div>
-    </section>
+window.addEventListener('DOMContentLoaded', () => {
+  initWebcam();
+  syncInputsWithConfig();
+  loadSavedOverlay();
+  updateTemplatePreview();
 
-    <!-- EDITOR DE PLANTILLAS -->
-    <section id="sec-templates">
-      <h2>Editor de Plantilla Personalizable (Tira 2x6" en Hoja 4x6")</h2>
-      
-      <div class="editor-grid">
-        <div class="card">
-          <h3>Ajustes Generales</h3>
-          
-          <label>Cantidad de Fotos por Sesión:</label>
-          <select id="tmpl-shot-count" onchange="updateTemplateConfig()">
-            <option value="1">1 Foto</option>
-            <option value="2">2 Fotos</option>
-            <option value="3" selected>3 Fotos</option>
-          </select>
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && document.getElementById('sec-kiosk').classList.contains('active')) {
+      const modalVisible = document.getElementById('result-modal').style.display === 'flex';
+      if (!modalVisible && !document.getElementById('start-session-btn').disabled) {
+        startPhotoSession();
+      }
+    }
+  });
+});
 
-          <label>Filtro de Foto:</label>
-          <select id="tmpl-filter-select" onchange="updateTemplateConfig()">
-            <option value="none">Normal (Color)</option>
-            <option value="grayscale(100%)">Blanco y Negro</option>
-            <option value="sepia(100%)">Sepia / Vintage</option>
-            <option value="contrast(130%)">Alto Contraste</option>
-          </select>
+function showSection(sectionId) {
+  document.querySelectorAll('main > section').forEach(sec => sec.classList.remove('active'));
+  document.getElementById(`sec-${sectionId}`).classList.add('active');
+  if (sectionId === 'templates') updateTemplatePreview();
+  if (sectionId === 'gallery') renderGallery();
+  if (sectionId === 'kiosk') initWebcam();
+}
 
-          <label>Tiempo Conteo Regresivo (seg):</label>
-          <input type="number" id="tmpl-countdown-input" min="1" max="10" value="5" onchange="updateTemplateConfig()">
+function syncInputsWithConfig() {
+  document.getElementById('tmpl-title-input').value = templateConfig.title || "";
+  document.getElementById('tmpl-bg-color').value = templateConfig.bgColor || "#ffffff";
+  document.getElementById('tmpl-text-color').value = templateConfig.textColor || "#000000";
+  document.getElementById('tmpl-shot-count').value = templateConfig.shotCount || 3;
+  document.getElementById('tmpl-filter-select').value = templateConfig.filter || "none";
+  document.getElementById('tmpl-countdown-input').value = templateConfig.countdownSec || 5;
+  document.getElementById('tmpl-shape-select').value = templateConfig.shape || "rect";
+  document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
 
-          <label>Texto / Banner inferior:</label>
-          <input type="text" id="tmpl-title-input" placeholder="Texto (ej. Mis 15 Años)" oninput="updateTemplateConfig()">
-          
-          <label>Color de Fondo:</label>
-          <input type="color" id="tmpl-bg-color" value="#ffffff" onchange="updateTemplateConfig()">
-          
-          <label>Color del Texto:</label>
-          <input type="color" id="tmpl-text-color" value="#000000" onchange="updateTemplateConfig()">
+  const pos = templateConfig.photosPos;
+  ['f1', 'f2', 'f3'].forEach((id, i) => {
+    if (pos[i]) {
+      document.getElementById(`${id}-x`).value = pos[i].x;
+      document.getElementById(`${id}-y`).value = pos[i].y;
+      document.getElementById(`${id}-w`).value = pos[i].w;
+      document.getElementById(`${id}-orient`).value = pos[i].orient || "16:9";
+    }
+  });
 
-          <label>Forma de las Fotos:</label>
-          <select id="tmpl-shape-select" onchange="updateTemplateConfig()">
-            <option value="rect">Rectangular</option>
-            <option value="rounded">Bordes Redondeados</option>
-          </select>
+  togglePhotoGroupsVisibility();
+}
 
-          <label>Radio de Bordes Redondeados: 
-            <input type="range" id="tmpl-border-radius" min="0" max="80" value="20" oninput="updateTemplateConfig()">
-          </label>
+function togglePhotoGroupsVisibility() {
+  const count = templateConfig.shotCount || 3;
+  document.getElementById('group-f2').style.display = count >= 2 ? 'block' : 'none';
+  document.getElementById('group-f3').style.display = count >= 3 ? 'block' : 'none';
+  
+  document.getElementById('start-session-btn').innerText = `Iniciar Sesión (${count} Foto${count > 1 ? 's' : ''})`;
+}
 
-          <label>Marco PNG Transparente (Opcional):</label>
-          <input type="file" id="tmpl-overlay-input" accept="image/png" onchange="loadOverlay(event)">
-          <button type="button" onclick="clearOverlay()" class="btn-danger">Quitar Marco PNG</button>
-        </div>
+function updateTemplateConfig() {
+  templateConfig.title = document.getElementById('tmpl-title-input').value || "";
+  templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
+  templateConfig.textColor = document.getElementById('tmpl-text-color').value;
+  templateConfig.shotCount = parseInt(document.getElementById('tmpl-shot-count').value) || 3;
+  templateConfig.filter = document.getElementById('tmpl-filter-select').value;
+  templateConfig.countdownSec = parseInt(document.getElementById('tmpl-countdown-input').value) || 5;
+  templateConfig.shape = document.getElementById('tmpl-shape-select').value;
+  templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
 
-        <div class="card">
-          <h3>Posicionamiento y Orientación Individual</h3>
-          
-          <!-- FOTO 1 -->
-          <div id="group-f1" class="pos-group highlighted-group">
-            <h4>⭐ Foto 1</h4>
-            <label>Orientación:
-              <select id="f1-orient" onchange="updatePhotoPos()">
-                <option value="9:16">Vertical (9:16)</option>
-                <option value="16:9" selected>Horizontal (16:9)</option>
-              </select>
-            </label>
-            <label>Posición X: <input type="range" id="f1-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
-            <label>Posición Y: <input type="range" id="f1-y" min="-100" max="1400" value="60" oninput="updatePhotoPos()"></label>
-            <label>Ancho (px): <input type="range" id="f1-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
-          </div>
+  const video = document.getElementById('webcam');
+  if (video) video.style.filter = templateConfig.filter;
 
-          <!-- FOTO 2 -->
-          <div id="group-f2" class="pos-group">
-            <h4>Foto 2</h4>
-            <label>Orientación:
-              <select id="f2-orient" onchange="updatePhotoPos()">
-                <option value="9:16">Vertical (9:16)</option>
-                <option value="16:9" selected>Horizontal (16:9)</option>
-              </select>
-            </label>
-            <label>Posición X: <input type="range" id="f2-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
-            <label>Posición Y: <input type="range" id="f2-y" min="-100" max="1400" value="560" oninput="updatePhotoPos()"></label>
-            <label>Ancho (px): <input type="range" id="f2-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
-          </div>
+  togglePhotoGroupsVisibility();
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
 
-          <!-- FOTO 3 -->
-          <div id="group-f3" class="pos-group">
-            <h4>Foto 3</h4>
-            <label>Orientación:
-              <select id="f3-orient" onchange="updatePhotoPos()">
-                <option value="9:16">Vertical (9:16)</option>
-                <option value="16:9" selected>Horizontal (16:9)</option>
-              </select>
-            </label>
-            <label>Posición X: <input type="range" id="f3-x" min="-100" max="400" value="40" oninput="updatePhotoPos()"></label>
-            <label>Posición Y: <input type="range" id="f3-y" min="-100" max="1400" value="1060" oninput="updatePhotoPos()"></label>
-            <label>Ancho (px): <input type="range" id="f3-w" min="100" max="600" value="520" oninput="updatePhotoPos()"></label>
-          </div>
-        </div>
-      </div>
+function updatePhotoPos() {
+  templateConfig.photosPos = [
+    {
+      x: parseInt(document.getElementById('f1-x').value),
+      y: parseInt(document.getElementById('f1-y').value),
+      w: parseInt(document.getElementById('f1-w').value),
+      orient: document.getElementById('f1-orient').value
+    },
+    {
+      x: parseInt(document.getElementById('f2-x').value),
+      y: parseInt(document.getElementById('f2-y').value),
+      w: parseInt(document.getElementById('f2-w').value),
+      orient: document.getElementById('f2-orient').value
+    },
+    {
+      x: parseInt(document.getElementById('f3-x').value),
+      y: parseInt(document.getElementById('f3-y').value),
+      w: parseInt(document.getElementById('f3-w').value),
+      orient: document.getElementById('f3-orient').value
+    }
+  ];
 
-      <h3>Vista Previa del Lienzo en Tiempo Real (1200x1800 px)</h3>
-      <div class="canvas-container">
-        <canvas id="template-canvas" width="1200" height="1800"></canvas>
-      </div>
-    </section>
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
 
-    <!-- GALERÍA -->
-    <section id="sec-gallery">
-      <h2>Galería de Fotos Capturadas</h2>
-      <div id="gallery-grid" class="gallery-grid"></div>
-    </section>
-  </main>
+function saveTemplateConfig() {
+  localStorage.setItem('pb_last_template', JSON.stringify(templateConfig));
+}
 
-  <script src="app.js"></script>
-</body>
-</html>
+function loadOverlay(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    templateConfig.overlayData = dataUrl;
+    saveTemplateConfig();
+    
+    const img = new Image();
+    img.onload = () => {
+      currentOverlayImage = img;
+      updateTemplatePreview();
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadSavedOverlay() {
+  if (templateConfig.overlayData) {
+    const img = new Image();
+    img.onload = () => {
+      currentOverlayImage = img;
+      updateTemplatePreview();
+    };
+    img.src = templateConfig.overlayData;
+  }
+}
+
+function clearOverlay() {
+  templateConfig.overlayData = null;
+  currentOverlayImage = null;
+  document.getElementById('tmpl-overlay-input').value = "";
+  saveTemplateConfig();
+  updateTemplatePreview();
+}
+
+function updateTemplatePreview() {
+  const canvas = document.getElementById('template-canvas');
+  if (canvas) {
+    drawLayout(canvas, []);
+  }
+}
+
+// DIBUJAR BORDES REDONDEADOS COMPATIBLES CON TODOS LOS NAVEGADORES
+function drawCustomRoundedRect(ctx, x, y, width, height, radius) {
+  if (radius <= 0) {
+    ctx.rect(x, y, width, height);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function drawLayout(canvas, photosArray) {
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = templateConfig.bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawStrip(ctx, 0, photosArray);   // Tira 1
+  drawStrip(ctx, 600, photosArray); // Tira 2
+
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(600, 0);
+  ctx.lineTo(600, 1800);
+  ctx.strokeStyle = "#cccccc";
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawStrip(ctx, offsetX, photosArray) {
+  const stripWidth = 600;
+  const totalShots = templateConfig.shotCount || 3;
+
+  for (let i = 0; i < totalShots; i++) {
+    const pos = templateConfig.photosPos[i];
+    const photoW = pos.w;
+    const is916 = pos.orient === "9:16";
+    const photoH = is916 ? photoW * (16 / 9) : photoW * (9 / 16);
+
+    const posX = offsetX + pos.x;
+    const posY = pos.y;
+
+    ctx.save();
+    ctx.beginPath();
+
+    if (templateConfig.shape === 'rounded') {
+      drawCustomRoundedRect(ctx, posX, posY, photoW, photoH, templateConfig.borderRadius);
+    } else {
+      ctx.rect(posX, posY, photoW, photoH);
+    }
+    ctx.clip();
+
+    if (photosArray[i]) {
+      ctx.drawImage(photosArray[i], posX, posY, photoW, photoH);
+    } else {
+      ctx.fillStyle = "#e0e0e0";
+      ctx.fillRect(posX, posY, photoW, photoH);
+      ctx.fillStyle = "#888888";
+      ctx.font = "26px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`Foto ${i + 1} (${pos.orient})`, posX + photoW / 2, posY + photoH / 2);
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle = templateConfig.textColor;
+  ctx.font = "bold 36px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(templateConfig.title, offsetX + stripWidth / 2, 1650);
+
+  if (currentOverlayImage) {
+    ctx.drawImage(currentOverlayImage, offsetX, 0, stripWidth, 1800);
+  }
+}
+
+// ACCESO ROBUSTO A LA CÁMARA WEB
+async function initWebcam() {
+  const video = document.getElementById('webcam');
+  if (!video) return;
+
+  if (video.srcObject && video.srcObject.active) return;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    video.style.filter = templateConfig.filter || "none";
+    await video.play();
+  } catch (err) {
+    try {
+      const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = fallbackStream;
+      video.style.filter = templateConfig.filter || "none";
+      await video.play();
+    } catch (fallbackErr) {
+      console.error("Error al acceder a la cámara:", fallbackErr);
+      alert("Por favor concede acceso a la cámara en tu navegador para continuar.");
+    }
+  }
+}
+
+async function startPhotoSession() {
+  capturedShots = [];
+  const btn = document.getElementById('start-session-btn');
+  btn.disabled = true;
+
+  const seconds = templateConfig.countdownSec || 5;
+  const totalShots = templateConfig.shotCount || 3;
+
+  for (let i = 1; i <= totalShots; i++) {
+    await runCountdown(seconds, `Foto ${i}`);
+    
+    const currentOrient = templateConfig.photosPos[i - 1].orient;
+    const img = captureFrameByOrientation(currentOrient);
+    capturedShots.push(img);
+
+    if (i < totalShots) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+
+  btn.disabled = false;
+  
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = 1200;
+  finalCanvas.height = 1800;
+  
+  drawLayout(finalCanvas, capturedShots);
+  
+  lastGeneratedPhotoUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
+  savePhotoToStorage(lastGeneratedPhotoUrl);
+  showResultModal(lastGeneratedPhotoUrl);
+}
+
+function runCountdown(seconds, label) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('countdown-overlay');
+    overlay.style.display = 'block';
+    let count = seconds;
+    overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
+
+    const timer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
+      } else {
+        clearInterval(timer);
+        overlay.style.display = 'none';
+        resolve();
+      }
+    }, 1000);
+  });
+}
+
+function captureFrameByOrientation(orient) {
+  const video = document.getElementById('webcam');
+  const tempCanvas = document.createElement('canvas');
+  
+  const vw = video.videoWidth || 1280;
+  const vh = video.videoHeight || 720;
+
+  const is916 = orient === "9:16";
+  const ratio = is916 ? (9 / 16) : (16 / 9);
+
+  let cropWidth = vw;
+  let cropHeight = vw / ratio;
+
+  if (cropHeight > vh) {
+    cropHeight = vh;
+    cropWidth = vh * ratio;
+  }
+
+  const cropX = (vw - cropWidth) / 2;
+  const cropY = (vh - cropHeight) / 2;
+
+  tempCanvas.width = cropWidth;
+  tempCanvas.height = cropHeight;
+  const ctx = tempCanvas.getContext('2d');
+
+  ctx.filter = templateConfig.filter || "none";
+
+  ctx.translate(tempCanvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+  const img = new Image();
+  img.src = tempCanvas.toDataURL('image/jpeg');
+  return img;
+}
+
+function savePhotoToStorage(dataUrl) {
+  const existingPhotos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
+  existingPhotos.push({ id: Date.now(), data: dataUrl, date: new Date().toLocaleString() });
+  localStorage.setItem('pb_photos_gallery', JSON.stringify(existingPhotos));
+}
+
+function showResultModal(dataUrl) {
+  document.getElementById('result-preview-img').src = dataUrl;
+  document.getElementById('result-modal').style.display = 'flex';
+}
+
+function closeResultModal() {
+  document.getElementById('result-modal').style.display = 'none';
+}
+
+function printCurrentPhoto() {
+  if (!lastGeneratedPhotoUrl) return;
+  printPhoto(lastGeneratedPhotoUrl);
+}
+
+async function shareCurrentPhoto() {
+  if (!lastGeneratedPhotoUrl) return;
+
+  try {
+    const blob = await (await fetch(lastGeneratedPhotoUrl)).blob();
+    const file = new File([blob], `fotocabina_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: 'Mi Tira de Fotos',
+        text: '¡Mira mi foto tomada en la cabina!',
+        files: [file]
+      });
+    } else {
+      const a = document.createElement('a');
+      a.href = lastGeneratedPhotoUrl;
+      a.download = `fotocabina_${Date.now()}.jpg`;
+      a.click();
+    }
+  } catch (err) {
+    console.error("Error al compartir:", err);
+  }
+}
+
+function renderGallery() {
+  const grid = document.getElementById('gallery-grid');
+  grid.innerHTML = '';
+
+  const photos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
+  if (photos.length === 0) {
+    grid.innerHTML = '<p>No hay fotos tomadas aún.</p>';
+    return;
+  }
+
+  photos.reverse().forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'gallery-item';
+    item.innerHTML = `
+      <img src="${p.data}" alt="Foto 4x6">
+      <small>${p.date}</small>
+      <button onclick="printPhoto('${p.data}')">Imprimir / Descargar</button>
+    `;
+    grid.appendChild(item);
+  });
+}
+
+function printPhoto(dataUrl) {
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Imprimir Foto 4x6</title>
+        <style>
+          @page { size: 4in 6in; margin: 0; }
+          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
+          img { width: 100%; height: 100%; object-fit: contain; }
+        </style>
+      </head>
+      <body>
+        <img src="${dataUrl}" onload="window.print(); window.close();">
+      </body>
+    </html>
+  `);
+}
