@@ -28,7 +28,13 @@ button {
   color: #fff;
   background: #252525;
   min-height: 44px;
+  cursor: pointer;
   touch-action: manipulation;
+  transition: background 0.2s ease;
+}
+
+button:hover {
+  background: #333;
 }
 
 button:focus-visible, input:focus-visible, select:focus-visible {
@@ -38,16 +44,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .app {
   min-height: 100vh;
-  min-height: 100svh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Barra Superior */
 .top {
   min-height: 64px;
-  padding: 10px max(18px, env(safe-area-inset-left)) 10px max(18px, env(safe-area-inset-right));
+  padding: 10px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -58,7 +63,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 
 .brand {
-  font-size: clamp(16px, 2.5vw, 21px);
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: .5px;
 }
@@ -67,21 +72,35 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   color: #28a9ff;
 }
 
-.gear {
-  font-size: 22px;
-  min-width: 44px;
+.brand small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #9ca3af;
+  font-weight: 600;
 }
 
+.gear {
+  font-size: 20px;
+  min-width: 44px;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 12px;
+}
+
+/* Oculta y Muestra Pantallas */
 .screen {
-  display: none;
+  display: none !important;
   flex: 1;
   min-width: 0;
 }
 
 .screen.active {
-  display: flex;
+  display: flex !important;
+  flex-direction: column;
 }
 
+/* Pantalla Inicio */
 .home {
   position: relative;
   isolation: isolate;
@@ -89,7 +108,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: clamp(16px, 4vw, 40px);
+  padding: 40px 20px;
   min-height: calc(100dvh - 64px);
   background: #080808;
 }
@@ -107,82 +126,84 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .homeShade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, .25), rgba(0, 0, 0, .5) 45%, rgba(0, 0, 0, .72));
+  background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.5) 45%, rgba(0,0,0,.72));
   z-index: -1;
 }
 
 .homeBox {
-  max-width: 650px;
-  width: min(100%, 650px);
-  padding: clamp(20px, 4vw, 42px);
-  border: 1px solid #ffffff38;
+  max-width: 600px;
+  width: 100%;
+  padding: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 28px;
-  background: rgba(8, 8, 8, .28);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  text-shadow: 0 2px 18px #000;
+  background: rgba(8, 8, 8, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .home h1 {
-  font-size: clamp(40px, 8vw, 78px);
-  margin: 0 0 8px;
+  font-size: clamp(40px, 6vw, 70px);
+  margin: 0 0 4px;
+  font-weight: 900;
 }
 
 .home h2 {
-  font-size: clamp(22px, 4vw, 36px);
-  margin: 0 0 22px;
+  font-size: clamp(20px, 3vw, 32px);
+  margin: 0 0 20px;
   letter-spacing: .12em;
 }
 
 .home p {
   color: #fff;
-  font-size: clamp(18px, 3vw, 26px);
+  font-size: 20px;
   font-weight: 600;
   margin: 0 0 24px;
 }
 
-.home .primary {
-  box-shadow: 0 8px 30px #0007;
-}
-
 .primary {
   background: #147fe3;
-  font-size: clamp(16px, 2.5vw, 20px);
-  padding: 17px 28px;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 16px 32px;
 }
 
+.primary:hover {
+  background: #0088ff;
+}
+
+/* Layout Captura (Igual a la imagen 2) */
 .camera {
   width: min(1200px, 100%);
   margin: auto;
-  padding: clamp(8px, 1.5vw, 16px);
+  padding: 20px;
 }
 
 .captureLayout {
   display: grid;
-  grid-template-columns: clamp(66px, 10vw, 118px) minmax(0, 1fr);
-  gap: clamp(8px, 1.5vw, 16px);
-  align-items: start;
+  grid-template-columns: 140px 1fr;
+  gap: 20px;
+  align-items: center;
 }
 
 .shotRail {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 0;
+  gap: 12px;
 }
 
 .shotThumb {
   position: relative;
   aspect-ratio: 4/3;
-  background: #202020;
-  border: 2px solid #383838;
-  border-radius: 10px;
+  background: #1e1e1e;
+  border: 2px solid #333;
+  border-radius: 12px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #777;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: bold;
 }
 
 .shotThumb.done {
@@ -193,32 +214,17 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
-}
-
-.shotThumb span {
-  position: absolute;
-  left: 4px;
-  bottom: 4px;
-  background: #000b;
-  color: #fff;
-  padding: 2px 5px;
-  border-radius: 5px;
-  font-size: 10px;
-}
-
-.cameraMain {
-  min-width: 0;
 }
 
 .videoBox {
   position: relative;
   background: #000;
-  border-radius: clamp(10px, 2vw, 20px);
+  border-radius: 20px;
   overflow: hidden;
   aspect-ratio: 16/9;
   width: 100%;
   max-height: 65dvh;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
 
 .videoBox video {
@@ -228,36 +234,28 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   transform: scaleX(-1);
 }
 
-#flash {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: #fff;
-  z-index: 9999;
-  pointer-events: none;
-}
-
 #count {
   position: absolute;
   inset: 0;
   display: none;
   align-items: center;
   justify-content: center;
-  font-size: clamp(80px, 18vw, 180px);
+  font-size: 120px;
   font-weight: 900;
+  color: #fff;
   text-shadow: 0 4px 25px #000;
 }
 
 .dots {
   display: flex;
   justify-content: center;
-  gap: 9px;
-  margin: 13px;
+  gap: 10px;
+  margin: 16px 0;
 }
 
 .dot {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #444;
 }
@@ -268,16 +266,27 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
-  flex-wrap: wrap;
 }
 
+.secondary {
+  background: #2a2a2a;
+}
+
+#flash {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  z-index: 9999;
+}
+
+/* Pantalla Resultado */
 .result {
   align-items: center;
   justify-content: center;
-  padding: clamp(10px, 3vw, 20px);
-  overflow: auto;
+  padding: 20px;
 }
 
 .resultBox {
@@ -289,42 +298,37 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   background: #fff;
   max-width: 100%;
   max-height: 60dvh;
-  height: auto;
-  width: auto;
-  object-fit: contain;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
+/* Pantalla Ajustes */
 .settings {
-  padding: clamp(10px, 2.5vw, 24px);
-  overflow: auto;
-  overscroll-behavior: contain;
-  min-height: 0;
+  padding: 24px;
+  overflow-y: auto;
 }
 
 .settingsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
-  gap: clamp(10px, 1.5vw, 15px);
-  max-width: 1400px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  max-width: 1300px;
   margin: auto;
-  align-items: start;
 }
 
 .card {
   background: #181818;
   border: 1px solid #303030;
   border-radius: 18px;
-  padding: clamp(12px, 1.5vw, 17px);
-  min-width: 0;
+  padding: 20px;
 }
 
 .card h3 {
   margin-top: 0;
+  margin-bottom: 16px;
 }
 
 .field {
-  margin: 12px 0;
+  margin-bottom: 14px;
 }
 
 .field label {
@@ -336,208 +340,30 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 input, select {
   width: 100%;
-  min-width: 0;
   background: #252525;
   color: #fff;
   border: 1px solid #444;
   border-radius: 10px;
-  padding: 11px;
-  font-size: 16px;
-  min-height: 44px;
-}
-
-input[type=color] {
-  padding: 4px;
-  min-height: 44px;
-}
-
-input[type=file] {
-  font-size: 14px;
-}
-
-.danger {
-  background: #9f2323;
-}
-
-.secondary {
-  background: #333;
-}
-
-.design {
-  padding: 20px;
-}
-
-.designGrid {
-  max-width: 1200px;
-  margin: auto;
-  display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-  gap: 18px;
-}
-
-.preview {
-  background: #202020;
-  border-radius: 18px;
-  padding: 15px;
-  text-align: center;
-  min-width: 0;
+  padding: 10px 14px;
+  font-size: 15px;
 }
 
 .preview canvas {
-  display: block;
-  max-width: 100%;
+  width: 100%;
   height: auto;
-  max-height: 75dvh;
-  margin: auto;
-  background: #fff;
   border-radius: 8px;
-}
-
-.frameList {
-  display: grid;
-  gap: 10px;
-}
-
-.frameItem {
-  background: #202020;
-  border: 1px solid #383838;
-  border-radius: 12px;
-  padding: 10px;
-  min-width: 0;
-}
-
-.frameItem strong {
-  display: block;
-  margin-bottom: 7px;
-}
-
-.miniGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.smallBtn {
-  padding: 8px 10px;
-  border-radius: 9px;
-  font-size: 13px;
-  min-height: 38px;
+  background: #fff;
 }
 
 .hidden {
   display: none;
 }
 
-@media(max-width: 760px) {
-  .designGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .top {
-    min-height: 56px;
-    padding-top: max(8px, env(safe-area-inset-top));
-    padding-left: max(12px, env(safe-area-inset-left));
-    padding-right: max(12px, env(safe-area-inset-right));
-  }
-  .settingsGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .camera {
-    padding: 8px;
-  }
+@media(max-width: 768px) {
   .captureLayout {
-    grid-template-columns: clamp(58px, 17vw, 78px) minmax(0, 1fr);
-    gap: 7px;
+    grid-template-columns: 1fr;
   }
   .shotRail {
-    gap: 7px;
-  }
-  .shotThumb {
-    border-radius: 7px;
-    font-size: 10px;
-  }
-  .videoBox {
-    max-height: 58dvh;
-    aspect-ratio: 4/3;
-  }
-  .home {
-    padding: 20px;
-  }
-  .result {
-    align-items: flex-start;
-  }
-}
-
-@media(min-width: 761px) and (max-width: 1100px) {
-  .settingsGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media(orientation: landscape) and (max-height: 520px) {
-  .top {
-    min-height: 46px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-  }
-  .brand small {
-    display: none !important;
-  }
-  .camera {
-    width: min(96vw, 1200px);
-    padding: 6px;
-  }
-  .captureLayout {
-    grid-template-columns: clamp(68px, 9vw, 100px) minmax(0, 1fr);
-    gap: 8px;
-  }
-  .videoBox {
-    max-height: 58dvh;
-    width: 100%;
-    max-width: 100%;
-    margin: auto;
-    aspect-ratio: 16/9;
-  }
-  .dots {
-    margin: 6px;
-  }
-  .actions {
-    gap: 6px;
-  }
-  .actions button {
-    padding: 9px 13px;
-    min-height: 38px;
-  }
-  .home {
-    padding: 10px;
-  }
-  .home h1 {
-    font-size: clamp(30px, 8vh, 56px);
-  }
-  .home h2 {
-    margin: 4px;
-  }
-  .settings {
-    padding: 10px;
-  }
-  .settingsGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .preview canvas {
-    max-height: 55dvh;
-  }
-  .result {
-    padding: 8px;
-  }
-  .resultCanvas {
-    max-height: 52dvh;
-  }
-}
-
-@media(prefers-reduced-motion: reduce) {
-  * {
-    scroll-behavior: auto !important;
-    animation: none !important;
-    transition: none !important;
+    flex-direction: row;
   }
 }
