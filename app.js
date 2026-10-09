@@ -40,7 +40,7 @@ function showSection(sectionId) {
   document.getElementById(`sec-${sectionId}`).classList.add('active');
   if (sectionId === 'templates') updateTemplatePreview();
   if (sectionId === 'gallery') renderGallery();
-  if (sectionId === 'kiosk') initWebcam(); // Re-inicializar si fuera necesario
+  if (sectionId === 'kiosk') initWebcam();
 }
 
 function syncInputsWithConfig() {
@@ -167,6 +167,25 @@ function updateTemplatePreview() {
   }
 }
 
+// DIBUJAR BORDES REDONDEADOS COMPATIBLES CON TODOS LOS NAVEGADORES
+function drawCustomRoundedRect(ctx, x, y, width, height, radius) {
+  if (radius <= 0) {
+    ctx.rect(x, y, width, height);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
 function drawLayout(canvas, photosArray) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = templateConfig.bgColor;
@@ -201,8 +220,7 @@ function drawStrip(ctx, offsetX, photosArray) {
     ctx.beginPath();
 
     if (templateConfig.shape === 'rounded') {
-      const r = templateConfig.borderRadius;
-      ctx.roundRect(posX, posY, photoW, photoH, r);
+      drawCustomRoundedRect(ctx, posX, posY, photoW, photoH, templateConfig.borderRadius);
     } else {
       ctx.rect(posX, posY, photoW, photoH);
     }
@@ -231,39 +249,30 @@ function drawStrip(ctx, offsetX, photosArray) {
   }
 }
 
-// CÁMARA ROBUSTA Y ADAPTATIVA (RESUELVE PANTALLA NEGRA)
+// ACCESO ROBUSTO A LA CÁMARA WEB
 async function initWebcam() {
   const video = document.getElementById('webcam');
   if (!video) return;
 
-  // Evitar reiniciar si ya hay un flujo funcionando
   if (video.srcObject && video.srcObject.active) return;
 
   try {
-    const constraints = {
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: "user"
-      },
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false
-    };
-
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    });
     video.srcObject = stream;
     video.style.filter = templateConfig.filter || "none";
     await video.play();
   } catch (err) {
-    console.warn("Intento básico con cámara por defecto...", err);
     try {
-      // Fallback a cualquier cámara disponible sin restricciones
       const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       video.srcObject = fallbackStream;
       video.style.filter = templateConfig.filter || "none";
       await video.play();
     } catch (fallbackErr) {
-      console.error("Error fatal al acceder a la webcam:", fallbackErr);
-      alert("No se detectó cámara web disponible. Verifica que la cámara esté conectada y hayas concedido permisos en el navegador.");
+      console.error("Error al acceder a la cámara:", fallbackErr);
+      alert("Por favor concede acceso a la cámara en tu navegador para continuar.");
     }
   }
 }
