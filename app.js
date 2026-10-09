@@ -1,487 +1,538 @@
-let currentOverlayImage = null;
-let capturedShots = [];
-let lastGeneratedPhotoUrl = null;
+// Registrar Service Worker para permitir funcionamiento completamente Offline
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.log('Error al registrar Service Worker:', err);
+    });
+  });
+}
 
-let templateConfig = JSON.parse(localStorage.getItem('pb_last_template')) || {
-  title: "¡Recuerdo de mi Evento!",
-  bgColor: "#ffffff",
-  textColor: "#000000",
-  shotCount: 3,
-  filter: "none",
-  countdownSec: 5,
-  autoPrint: false,
-  shape: "rect",
-  borderRadius: 20,
-  overlayData: null,
-  photosPos: [
-    { x: 40, y: 60, w: 520, orient: "16:9" },
-    { x: 40, y: 560, w: 520, orient: "16:9" },
-    { x: 40, y: 1060, w: 520, orient: "16:9" }
-  ]
+const $ = id => document.getElementById(id);
+let stream = null, shots = [], frame = null;
+
+const defaultFrames = [
+  { photo: 1, x: 1.5, y: 7, w: 47, h: 25 },
+  { photo: 2, x: 1.5, y: 37.5, w: 47, h: 25 },
+  { photo: 3, x: 1.5, y: 68, w: 47, h: 25 },
+  { photo: 1, x: 51.5, y: 7, w: 47, h: 25 },
+  { photo: 2, x: 51.5, y: 37.5, w: 47, h: 25 },
+  { photo: 3, x: 51.5, y: 68, w: 47, h: 25 }
+];
+
+let cfg = JSON.parse(localStorage.getItem('emeveCfg') || 'null') || {
+  format: '2x6x2',
+  stripMode: 'duplicate',
+  delay: 3,
+  photos: 3,
+  event: '',
+  topText: 'EMEVE PHOTOBOOTH',
+  bottomText: 'No hacemos eventos, creamos experiencias',
+  bg: '#ffffff',
+  fg: '#111111',
+  frame: null,
+  frames: defaultFrames
 };
 
-window.addEventListener('DOMContentLoaded', () => {
-  initWebcam();
-  syncInputsWithConfig();
-  loadSavedOverlay();
-  updateTemplatePreview();
-  updateSidebarPreview([]);
+cfg.stripMode = cfg.stripMode || 'duplicate';
+if (!Array.isArray(cfg.frames) || !cfg.frames.length) {
+  cfg.frames = JSON.parse(JSON.stringify(defaultFrames));
+}
 
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && document.getElementById('sec-kiosk').classList.contains('active')) {
-      const modalVisible = document.getElementById('result-modal').style.display === 'flex';
-      if (!modalVisible && !document.getElementById('start-session-btn').disabled) {
-        startPhotoSession();
-      }
+function apply() {
+  for (const k of ['format', 'delay', 'photos', 'event', 'topText', 'bottomText', 'bg', 'fg']) {
+    $(k).value = cfg[k];
+  }
+  $('stripMode').value = cfg.stripMode || 'duplicate';
+  $('stripModeField').style.display = cfg.format === '2x6x2' ? 'block' : 'none';
+  $('homeEvent').textContent = cfg.event || 'Toca para comenzar';
+  if (cfg.frame) {
+    let im = new Image();
+    im.onload = () => {
+      frame = im;
+      renderDesignPreview();
+    };
+    im.src = cfg.frame;
+  }
+  renderFrameList();
+  renderDesignPreview();
+}
+
+function saveCfg() {
+  for (const k of ['format', 'delay', 'event', 'topText', 'bottomText', 'bg', 'fg']) {
+    cfg[k] = $(k).value;
+  }
+  cfg.stripMode = $('stripMode').value;
+  cfg.photos = 3;
+  cfg.frames = readFrameList();
+  cfg.frame = frame ? frame.src : null;
+  localStorage.setItem('emeveCfg', JSON.stringify(cfg));
+  $('homeEvent').textContent = cfg.event || 'Toca para comenzar';
+}
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function dots() {
+  $('dots').innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    let d = document.createElement('i');
+    d.className = 'dot ' + (i < shots.length ? 'done' : '');
+    $('dots').appendChild(d);
+    const t = $('thumb' + (i + 1));
+    if (t) {
+      t.classList.toggle('done', i < shots.length);
+      t.innerHTML = i < shots.length 
+        ? '<img alt="Foto ' + (i + 1) + ' capturada" src="' + shots[i] + '"><span>Foto ' + (i + 1) + '</span>' 
+        : 'Foto ' + (i + 1);
     }
+  }
+}
+
+async function camera() {
+  if (!stream) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+  const live = $('homeVideo'), capture = $('video');
+  if (live && live.srcObject !== stream) live.srcObject = stream;
+  if (capture && capture.srcObject !== stream) capture.srcObject = stream;
+  try {
+    if (live) await live.play();
+    if (capture) await capture.play();
+  } catch (e) {}
+  return true;
+}
+
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function countdown(seconds, n) {
+  $('captureStatus').textContent = 'Preparando Foto ' + n + ' de 3';
+  for (let i = seconds; i > 0; i--) {
+    $('count').style.display = 'flex';
+    $('count').textContent = i;
+    await wait(1000);
+  }
+  $('count').style.display = 'none';
+  $('captureStatus').textContent = '¡FOTO ' + n + '!';
+  await wait(120);
+}
+
+function captureFrame() {
+  const c = document.createElement('canvas');
+  c.width = 1920;
+  c.height = 1080;
+  const v = $('video'), ctx = c.getContext('2d');
+  const vw = v.videoWidth || 1920, vh = v.videoHeight || 1080;
+  const srcRatio = vw / vh, target = 1920 / 1080;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (srcRatio > target) {
+    sw = Math.round(vh * target);
+    sx = Math.round((vw - sw) / 2);
+  } else if (srcRatio < target) {
+    sh = Math.round(vw / target);
+    sy = Math.round((vh - sh) / 2);
+  }
+  ctx.save();
+  ctx.translate(1920, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, 1920, 1080);
+  ctx.restore();
+  return c.toDataURL('image/jpeg', .95);
+}
+
+async function take() {
+  if (shots.length > 0) return;
+  $('cancel').disabled = true;
+  for (let n = 1; n <= 3; n++) {
+    await countdown(+cfg.delay, n);
+    await wait(35);
+    const photo = captureFrame();
+    shots.push(photo);
+    dots();
+    const f = $('flash');
+    f.style.display = 'block';
+    await wait(130);
+    f.style.display = 'none';
+    if (n < 3) await wait(350);
+  }
+  $('captureStatus').textContent = '¡Sesión terminada!';
+  await wait(450);
+  makeOutput();
+  $('cancel').disabled = false;
+}
+
+function img(src) {
+  return new Promise(res => {
+    let im = new Image();
+    im.onload = () => res(im);
+    im.src = src;
   });
+}
+
+function outputSize() {
+  return cfg.format === '2x6' ? { W: 600, H: 1800 } : { W: 1200, H: 1800 };
+}
+
+async function makeOutput() {
+  const { W, H } = outputSize();
+  $('out').width = W;
+  $('out').height = H;
+  const c = $('out'), x = c.getContext('2d');
+  x.fillStyle = cfg.bg;
+  x.fillRect(0, 0, W, H);
+  const images = await Promise.all(shots.map(img));
+  let frames = readFrameList();
+  if (cfg.format === '2x6x2' && cfg.stripMode === 'duplicate' && frames.length >= 3) {
+    frames = frames.slice(0, 3).concat(frames.slice(0, 3).map(f => ({ ...f, x: f.x + 50 })));
+  }
+  frames.forEach(f => drawFrame(x, f, W, H, images));
+  if (frame) x.drawImage(frame, 0, 0, W, H);
+  x.fillStyle = cfg.fg;
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  const pad = Math.round(H * .025);
+  if (cfg.topText) {
+    x.font = 'bold ' + Math.max(22, Math.round(H * .035)) + 'px Arial';
+    x.fillText(cfg.topText, W / 2, pad + Math.round(H * .02), W * .92);
+  }
+  if (cfg.event) {
+    x.font = 'bold ' + Math.max(18, Math.round(H * .025)) + 'px Arial';
+    x.fillText(cfg.event, W / 2, H - pad - Math.round(H * .04), W * .92);
+  } else if (cfg.bottomText) {
+    x.font = 'bold ' + Math.max(16, Math.round(H * .022)) + 'px Arial';
+    x.fillText(cfg.bottomText, W / 2, H - pad - Math.round(H * .04), W * .92);
+  }
+  show('result');
+}
+
+function drawFrame(x, f, W, H, ims) {
+  const im = ims[(Math.max(1, Math.min(3, +f.photo || 1))) - 1];
+  const px = W * f.x / 100, py = H * f.y / 100, pw = W * f.w / 100, ph = H * f.h / 100;
+  x.save();
+  x.beginPath();
+  x.rect(px, py, pw, ph);
+  x.clip();
+  const ir = im.width / im.height, tr = pw / ph;
+  let sw = im.width, sh = im.height;
+  if (ir > tr) sw = im.height * tr;
+  else sh = im.width / tr;
+  const sx = (im.width - sw) / 2, sy = (im.height - sh) / 2;
+  x.drawImage(im, sx, sy, sw, sh, px, py, pw, ph);
+  x.restore();
+}
+
+function baseFrames() {
+  if (cfg.format === '2x6x2') return JSON.parse(JSON.stringify(defaultFrames));
+  if (cfg.format === '2x6') return [
+    { photo: 1, x: 5, y: 7, w: 90, h: 25 },
+    { photo: 2, x: 5, y: 37.5, w: 90, h: 25 },
+    { photo: 3, x: 5, y: 68, w: 90, h: 25 }
+  ];
+  return [
+    { photo: 1, x: 5, y: 7, w: 90, h: 25 },
+    { photo: 2, x: 5, y: 37.5, w: 90, h: 25 },
+    { photo: 3, x: 5, y: 68, w: 90, h: 25 }
+  ];
+}
+
+function readFrameList() {
+  const nodes = [...document.querySelectorAll('.frameItem')];
+  return nodes.length ? nodes.map(n => ({
+    photo: +n.querySelector('.fp').value,
+    x: +n.querySelector('.fx').value,
+    y: +n.querySelector('.fy').value,
+    w: +n.querySelector('.fw').value,
+    h: +n.querySelector('.fh').value
+  })) : cfg.frames;
+}
+
+function renderFrameList() {
+  const list = $('frameList');
+  if (!list) return;
+  list.innerHTML = '';
+  cfg.frames.forEach((f, i) => addFrameUI(f, i, list));
+}
+
+function addFrameUI(f, i, list = $('frameList')) {
+  const d = document.createElement('div');
+  d.className = 'frameItem';
+  d.innerHTML = '<strong>Marco ' + (i + 1) + '</strong><div class="field"><label>Mostrar</label><select class="fp"><option value="1">Foto 1</option><option value="2">Foto 2</option><option value="3">Foto 3</option></select></div><div class="miniGrid"><input class="fx" type="number" min="0" max="100" step="0.5" placeholder="X %"><input class="fy" type="number" min="0" max="100" step="0.5" placeholder="Y %"><input class="fw" type="number" min="1" max="100" step="0.5" placeholder="Ancho %"><input class="fh" type="number" min="1" max="100" step="0.5" placeholder="Alto %"></div><button class="danger smallBtn removeFrame" style="margin-top:8px">Eliminar marco</button>';
+  list.appendChild(d);
+  d.querySelector('.fp').value = f.photo;
+  d.querySelector('.fx').value = f.x;
+  d.querySelector('.fy').value = f.y;
+  d.querySelector('.fw').value = f.w;
+  d.querySelector('.fh').value = f.h;
+  d.querySelectorAll('input,select').forEach(el => {
+    el.addEventListener('input', renderDesignPreview);
+    el.addEventListener('change', renderDesignPreview);
+  });
+  d.querySelector('.removeFrame').onclick = () => {
+    d.remove();
+    renderDesignPreview();
+  };
+}
+
+function renderDesignPreview() {
+  const c = $('designPreview');
+  if (!c) return;
+  cfg.format = $('format').value;
+  cfg.stripMode = $('stripMode').value;
+  cfg.event = $('event').value;
+  cfg.topText = $('topText').value;
+  cfg.bottomText = $('bottomText').value;
+  cfg.bg = $('bg').value;
+  cfg.fg = $('fg').value;
+
+  const { W, H } = outputSize();
+  c.width = W;
+  c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = cfg.bg;
+  x.fillRect(0, 0, W, H);
+
+  let previewFrames = readFrameList();
+  if (cfg.format === '2x6x2' && cfg.stripMode === 'duplicate' && previewFrames.length >= 3) {
+    previewFrames = previewFrames.slice(0, 3).concat(previewFrames.slice(0, 3).map(f => ({ ...f, x: f.x + 50 })));
+  }
+
+  function placeholderPhoto(n, px, py, pw, ph) {
+    x.save();
+    x.beginPath();
+    x.rect(px, py, pw, ph);
+    x.clip();
+    const g = x.createLinearGradient(px, py, px + pw, py + ph);
+    g.addColorStop(0, ['#426b86', '#765c8b', '#b86d70'][n - 1]);
+    g.addColorStop(1, ['#d4b99b', '#b7c7d8', '#e7bd8e'][n - 1]);
+    x.fillStyle = g;
+    x.fillRect(px, py, pw, ph);
+    x.fillStyle = 'rgba(15,25,35,.28)';
+    x.beginPath();
+    x.ellipse(px + pw * .5, py + ph * .8, pw * .34, ph * .22, 0, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = 'rgba(255,255,255,.85)';
+    x.beginPath();
+    x.arc(px + pw * .5, py + ph * .35, Math.min(pw, ph) * .13, 0, Math.PI * 2);
+    x.fill();
+    x.font = 'bold ' + Math.max(12, Math.round(pw * .075)) + 'px Arial';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillStyle = '#fff';
+    x.shadowColor = '#0008';
+    x.shadowBlur = 5;
+    x.fillText('VISTA FOTO ' + n, px + pw / 2, py + ph * .66, pw * .9);
+    x.restore();
+  }
+
+  previewFrames.forEach(f => {
+    const px = W * f.x / 100, py = H * f.y / 100, pw = W * f.w / 100, ph = H * f.h / 100;
+    const shot = shots[Number(f.photo) - 1];
+    if (shot) {
+      const im = new Image();
+      im.onload = () => {
+        const xx = c.getContext('2d');
+        const ir = im.width / im.height, tr = pw / ph;
+        let sw = im.width, sh = im.height;
+        if (ir > tr) sw = im.height * tr;
+        else sh = im.width / tr;
+        xx.save();
+        xx.beginPath();
+        xx.rect(px, py, pw, ph);
+        xx.clip();
+        xx.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, px, py, pw, ph);
+        xx.restore();
+        if (frame) xx.drawImage(frame, 0, 0, W, H);
+      };
+      im.src = shot;
+    } else {
+      placeholderPhoto(Math.max(1, Math.min(3, +f.photo || 1)), px, py, pw, ph);
+    }
+    x.strokeStyle = '#28a9ff';
+    x.lineWidth = Math.max(2, W / 600);
+    x.strokeRect(px, py, pw, ph);
+  });
+
+  if (frame) x.drawImage(frame, 0, 0, W, H);
+  x.fillStyle = cfg.fg;
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  const pad = Math.round(H * .025);
+  if (cfg.topText) {
+    x.font = 'bold ' + Math.max(22, Math.round(H * .035)) + 'px Arial';
+    x.fillText(cfg.topText, W / 2, pad + Math.round(H * .02), W * .92);
+  }
+  if (cfg.event) {
+    x.font = 'bold ' + Math.max(18, Math.round(H * .025)) + 'px Arial';
+    x.fillText(cfg.event, W / 2, H - pad - Math.round(H * .04), W * .92);
+  } else if (cfg.bottomText) {
+    x.font = 'bold ' + Math.max(16, Math.round(H * .022)) + 'px Arial';
+    x.fillText(cfg.bottomText, W / 2, H - pad - Math.round(H * .04), W * .92);
+  }
+}
+
+// Listeners Eventos
+$('begin').onclick = async () => {
+  saveCfg();
+  shots = [];
+  dots();
+  if (await camera()) {
+    show('capture');
+    take();
+  } else {
+    alert('No se pudo abrir la cámara. Permite el acceso a Cámara y abre la aplicación desde HTTPS.');
+  }
+};
+
+$('cancel').onclick = () => {
+  shots = [];
+  dots();
+  $('count').style.display = 'none';
+  $('flash').style.display = 'none';
+  $('captureStatus').textContent = 'Preparando sesión…';
+  show('home');
+  $('cancel').disabled = false;
+};
+
+$('again').onclick = () => {
+  shots = [];
+  dots();
+  show('home');
+};
+
+$('adminBtn').onclick = () => {
+  renderFrameList();
+  renderDesignPreview();
+  show('settings');
+};
+
+$('closeSettings').onclick = () => {
+  saveCfg();
+  show('home');
+};
+
+$('saveTemplate').onclick = () => {
+  saveCfg();
+  alert('Plantilla guardada en este dispositivo.');
+};
+
+$('exportConfig').onclick = () => {
+  saveCfg();
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'emeve-plantilla.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$('importConfig').onclick = () => $('configFile').click();
+
+$('configFile').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const imported = JSON.parse(await file.text());
+    if (!imported || !Array.isArray(imported.frames)) throw new Error('Formato no válido');
+    cfg = { ...cfg, ...imported };
+    localStorage.setItem('emeveCfg', JSON.stringify(cfg));
+    frame = null;
+    if (cfg.frame) {
+      const im = new Image();
+      im.onload = () => {
+        frame = im;
+        apply();
+      };
+      im.onerror = () => {
+        cfg.frame = null;
+        apply();
+      };
+      im.src = cfg.frame;
+    } else apply();
+    alert('Configuración importada.');
+  } catch (err) {
+    alert('No se pudo importar. Usa un archivo JSON exportado desde Emeve Photobooth.');
+  }
+  e.target.value = '';
+};
+
+$('addFrame').onclick = () => {
+  addFrameUI({ photo: 1, x: 10, y: 10, w: 30, h: 20 });
+  renderDesignPreview();
+};
+
+$('format').onchange = () => {
+  cfg.format = $('format').value;
+  cfg.frames = baseFrames();
+  $('stripModeField').style.display = cfg.format === '2x6x2' ? 'block' : 'none';
+  renderFrameList();
+  renderDesignPreview();
+};
+
+$('stripMode').onchange = () => {
+  cfg.stripMode = $('stripMode').value;
+  renderDesignPreview();
+};
+
+['bg', 'fg', 'topText', 'bottomText', 'event'].forEach(id => $(id).oninput = () => {
+  cfg[id] = $(id).value;
+  renderDesignPreview();
 });
 
-function showSection(sectionId) {
-  document.querySelectorAll('main > section').forEach(sec => sec.classList.remove('active'));
-  document.getElementById(`sec-${sectionId}`).classList.add('active');
-  if (sectionId === 'templates') updateTemplatePreview();
-  if (sectionId === 'gallery') renderGallery();
-  if (sectionId === 'kiosk') {
-    initWebcam();
-    updateSidebarPreview(capturedShots);
-  }
-}
-
-function syncInputsWithConfig() {
-  document.getElementById('tmpl-title-input').value = templateConfig.title || "";
-  document.getElementById('tmpl-bg-color').value = templateConfig.bgColor || "#ffffff";
-  document.getElementById('tmpl-text-color').value = templateConfig.textColor || "#000000";
-  document.getElementById('tmpl-shot-count').value = templateConfig.shotCount || 3;
-  document.getElementById('tmpl-filter-select').value = templateConfig.filter || "none";
-  document.getElementById('tmpl-countdown-input').value = templateConfig.countdownSec || 5;
-  document.getElementById('tmpl-auto-print').value = templateConfig.autoPrint ? "true" : "false";
-  document.getElementById('tmpl-shape-select').value = templateConfig.shape || "rect";
-  document.getElementById('tmpl-border-radius').value = templateConfig.borderRadius || 20;
-
-  const pos = templateConfig.photosPos;
-  ['f1', 'f2', 'f3'].forEach((id, i) => {
-    if (pos[i]) {
-      document.getElementById(`${id}-x`).value = pos[i].x;
-      document.getElementById(`${id}-y`).value = pos[i].y;
-      document.getElementById(`${id}-w`).value = pos[i].w;
-      document.getElementById(`${id}-orient`).value = pos[i].orient || "16:9";
-    }
-  });
-
-  togglePhotoGroupsVisibility();
-}
-
-function togglePhotoGroupsVisibility() {
-  const count = templateConfig.shotCount || 3;
-  document.getElementById('group-f2').style.display = count >= 2 ? 'block' : 'none';
-  document.getElementById('group-f3').style.display = count >= 3 ? 'block' : 'none';
-  
-  document.getElementById('start-session-btn').innerText = `Iniciar Sesión (${count} Foto${count > 1 ? 's' : ''})`;
-}
-
-function updateTemplateConfig() {
-  templateConfig.title = document.getElementById('tmpl-title-input').value || "";
-  templateConfig.bgColor = document.getElementById('tmpl-bg-color').value;
-  templateConfig.textColor = document.getElementById('tmpl-text-color').value;
-  templateConfig.shotCount = parseInt(document.getElementById('tmpl-shot-count').value) || 3;
-  templateConfig.filter = document.getElementById('tmpl-filter-select').value;
-  templateConfig.countdownSec = parseInt(document.getElementById('tmpl-countdown-input').value) || 5;
-  templateConfig.autoPrint = document.getElementById('tmpl-auto-print').value === "true";
-  templateConfig.shape = document.getElementById('tmpl-shape-select').value;
-  templateConfig.borderRadius = parseInt(document.getElementById('tmpl-border-radius').value);
-
-  const video = document.getElementById('webcam');
-  if (video) video.style.filter = templateConfig.filter;
-
-  togglePhotoGroupsVisibility();
-  saveTemplateConfig();
-  updateTemplatePreview();
-  updateSidebarPreview([]);
-}
-
-function updatePhotoPos() {
-  templateConfig.photosPos = [
-    {
-      x: parseInt(document.getElementById('f1-x').value),
-      y: parseInt(document.getElementById('f1-y').value),
-      w: parseInt(document.getElementById('f1-w').value),
-      orient: document.getElementById('f1-orient').value
-    },
-    {
-      x: parseInt(document.getElementById('f2-x').value),
-      y: parseInt(document.getElementById('f2-y').value),
-      w: parseInt(document.getElementById('f2-w').value),
-      orient: document.getElementById('f2-orient').value
-    },
-    {
-      x: parseInt(document.getElementById('f3-x').value),
-      y: parseInt(document.getElementById('f3-y').value),
-      w: parseInt(document.getElementById('f3-w').value),
-      orient: document.getElementById('f3-orient').value
-    }
-  ];
-
-  saveTemplateConfig();
-  updateTemplatePreview();
-  updateSidebarPreview([]);
-}
-
-function saveTemplateConfig() {
-  localStorage.setItem('pb_last_template', JSON.stringify(templateConfig));
-}
-
-function loadOverlay(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const dataUrl = e.target.result;
-    templateConfig.overlayData = dataUrl;
-    saveTemplateConfig();
-    
-    const img = new Image();
-    img.onload = () => {
-      currentOverlayImage = img;
-      updateTemplatePreview();
-      updateSidebarPreview([]);
+$('frame').onchange = e => {
+  let f = e.target.files[0];
+  if (!f) return;
+  let r = new FileReader();
+  r.onload = () => {
+    let im = new Image();
+    im.onload = () => {
+      frame = im;
+      cfg.frame = r.result;
+      renderDesignPreview();
     };
-    img.src = dataUrl;
+    im.src = r.result;
   };
-  reader.readAsDataURL(file);
-}
+  r.readAsDataURL(f);
+};
 
-function loadSavedOverlay() {
-  if (templateConfig.overlayData) {
-    const img = new Image();
-    img.onload = () => {
-      currentOverlayImage = img;
-      updateTemplatePreview();
-      updateSidebarPreview([]);
-    };
-    img.src = templateConfig.overlayData;
-  }
-}
+$('clearFrame').onclick = () => {
+  frame = null;
+  cfg.frame = null;
+  saveCfg();
+  $('frame').value = '';
+  renderDesignPreview();
+};
 
-function clearOverlay() {
-  templateConfig.overlayData = null;
-  currentOverlayImage = null;
-  document.getElementById('tmpl-overlay-input').value = "";
-  saveTemplateConfig();
-  updateTemplatePreview();
-  updateSidebarPreview([]);
-}
+$('save').onclick = () => {
+  let a = document.createElement('a');
+  a.download = 'EMEVE-' + (cfg.event || 'PHOTOBOOTH').trim().replace(/[^a-z0-9áéíóúñ_-]+/gi, '-') + '.jpg';
+  a.href = $('out').toDataURL('image/jpeg', .95);
+  a.click();
+};
 
-function updateTemplatePreview() {
-  const canvas = document.getElementById('template-canvas');
-  if (canvas) {
-    drawLayout(canvas, []);
-  }
-}
-
-function updateSidebarPreview(photosArray) {
-  const sidebarCanvas = document.getElementById('sidebar-canvas');
-  if (sidebarCanvas) {
-    const ctx = sidebarCanvas.getContext('2d');
-    ctx.fillStyle = templateConfig.bgColor;
-    ctx.fillRect(0, 0, sidebarCanvas.width, sidebarCanvas.height);
-    drawStrip(ctx, 0, photosArray);
-  }
-}
-
-function drawCustomRoundedRect(ctx, x, y, width, height, radius) {
-  if (radius <= 0) {
-    ctx.rect(x, y, width, height);
+$('print').onclick = () => {
+  let w = window.open('', '_blank');
+  if (!w) {
+    alert('Permite ventanas emergentes para imprimir.');
     return;
   }
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-}
+  const strip = cfg.format === '2x6';
+  const pw = strip ? '2in' : '4in', ph = '6in';
+  w.document.write('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Imprimir Emeve</title><style>@page{size:' + pw + ' ' + ph + ';margin:0}html,body{margin:0;padding:0;width:' + pw + ';height:' + ph + '}img{display:block;width:' + pw + ';height:' + ph + ';object-fit:fill}</style></head><body><img src="' + $('out').toDataURL('image/jpeg', .95) + '"><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>');
+  w.document.close();
+};
 
-function drawLayout(canvas, photosArray) {
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = templateConfig.bgColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+// Inicialización
+apply();
+dots();
 
-  drawStrip(ctx, 0, photosArray);   // Tira 1
-  drawStrip(ctx, 600, photosArray); // Tira 2
-
-  ctx.setLineDash([10, 10]);
-  ctx.beginPath();
-  ctx.moveTo(600, 0);
-  ctx.lineTo(600, 1800);
-  ctx.strokeStyle = "#cccccc";
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
-
-function drawStrip(ctx, offsetX, photosArray) {
-  const stripWidth = 600;
-  const totalShots = templateConfig.shotCount || 3;
-
-  for (let i = 0; i < totalShots; i++) {
-    const pos = templateConfig.photosPos[i];
-    const photoW = pos.w;
-    const is916 = pos.orient === "9:16";
-    const photoH = is916 ? photoW * (16 / 9) : photoW * (9 / 16);
-
-    const posX = offsetX + pos.x;
-    const posY = pos.y;
-
-    ctx.save();
-    ctx.beginPath();
-
-    if (templateConfig.shape === 'rounded') {
-      drawCustomRoundedRect(ctx, posX, posY, photoW, photoH, templateConfig.borderRadius);
-    } else {
-      ctx.rect(posX, posY, photoW, photoH);
-    }
-    ctx.clip();
-
-    if (photosArray[i]) {
-      ctx.drawImage(photosArray[i], posX, posY, photoW, photoH);
-    } else {
-      ctx.fillStyle = "#e0e0e0";
-      ctx.fillRect(posX, posY, photoW, photoH);
-      ctx.fillStyle = "#888888";
-      ctx.font = "26px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(`Foto ${i + 1}`, posX + photoW / 2, posY + photoH / 2);
-    }
-    ctx.restore();
-  }
-
-  ctx.fillStyle = templateConfig.textColor;
-  ctx.font = "bold 36px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(templateConfig.title, offsetX + stripWidth / 2, 1650);
-
-  if (currentOverlayImage) {
-    ctx.drawImage(currentOverlayImage, offsetX, 0, stripWidth, 1800);
-  }
-}
-
-// CÁMARA Y MODO KIOSCO
-async function initWebcam() {
-  const video = document.getElementById('webcam');
-  if (!video) return;
-
-  if (video.srcObject && video.srcObject.active) return;
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false
-    });
-    video.srcObject = stream;
-    video.style.filter = templateConfig.filter || "none";
-    await video.play();
-  } catch (err) {
-    try {
-      const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      video.srcObject = fallbackStream;
-      video.style.filter = templateConfig.filter || "none";
-      await video.play();
-    } catch (fallbackErr) {
-      console.error("Error al acceder a la cámara:", fallbackErr);
-    }
-  }
-}
-
-async function startPhotoSession() {
-  capturedShots = [];
-  updateSidebarPreview([]);
-  
-  const btn = document.getElementById('start-session-btn');
-  btn.disabled = true;
-
-  const seconds = templateConfig.countdownSec || 5;
-  const totalShots = templateConfig.shotCount || 3;
-
-  for (let i = 1; i <= totalShots; i++) {
-    await runCountdown(seconds, `Foto ${i}`);
-    
-    const currentOrient = templateConfig.photosPos[i - 1].orient;
-    const img = captureFrameByOrientation(currentOrient);
-    capturedShots.push(img);
-
-    updateSidebarPreview(capturedShots);
-
-    if (i < totalShots) {
-      await new Promise(r => setTimeout(r, 2000));
-    }
-  }
-
-  btn.disabled = false;
-  
-  // RENDERIZADO Y GUARDADO AUTOMÁTICO DE LA TIRA DE 2 STRIPS (4x6")
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = 1200;
-  finalCanvas.height = 1800;
-  
-  drawLayout(finalCanvas, capturedShots);
-  
-  lastGeneratedPhotoUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
-  
-  // Guardar automáticamente en el almacenamiento local
-  savePhotoToStorage(lastGeneratedPhotoUrl);
-  
-  // Desplegar modal gigantesco con la vista previa e impresiones
-  showResultModal(lastGeneratedPhotoUrl);
-
-  if (templateConfig.autoPrint) {
-    printCurrentPhoto();
-  }
-}
-
-function runCountdown(seconds, label) {
-  return new Promise(resolve => {
-    const overlay = document.getElementById('countdown-overlay');
-    overlay.style.display = 'block';
-    let count = seconds;
-    overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
-
-    const timer = setInterval(() => {
-      count--;
-      if (count > 0) {
-        overlay.innerHTML = `<div>${label}</div><div style="font-size: 12rem">${count}</div>`;
-      } else {
-        clearInterval(timer);
-        overlay.style.display = 'none';
-        resolve();
-      }
-    }, 1000);
-  });
-}
-
-function captureFrameByOrientation(orient) {
-  const video = document.getElementById('webcam');
-  const tempCanvas = document.createElement('canvas');
-  
-  const vw = video.videoWidth || 1280;
-  const vh = video.videoHeight || 720;
-
-  const is916 = orient === "9:16";
-  const ratio = is916 ? (9 / 16) : (16 / 9);
-
-  let cropWidth = vw;
-  let cropHeight = vw / ratio;
-
-  if (cropHeight > vh) {
-    cropHeight = vh;
-    cropWidth = vh * ratio;
-  }
-
-  const cropX = (vw - cropWidth) / 2;
-  const cropY = (vh - cropHeight) / 2;
-
-  tempCanvas.width = cropWidth;
-  tempCanvas.height = cropHeight;
-  const ctx = tempCanvas.getContext('2d');
-
-  ctx.filter = templateConfig.filter || "none";
-
-  ctx.translate(tempCanvas.width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-
-  const img = new Image();
-  img.src = tempCanvas.toDataURL('image/jpeg');
-  return img;
-}
-
-function savePhotoToStorage(dataUrl) {
-  const existingPhotos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
-  existingPhotos.push({ id: Date.now(), data: dataUrl, date: new Date().toLocaleString() });
-  localStorage.setItem('pb_photos_gallery', JSON.stringify(existingPhotos));
-}
-
-function showResultModal(dataUrl) {
-  document.getElementById('result-preview-img').src = dataUrl;
-  document.getElementById('result-modal').style.display = 'flex';
-}
-
-function closeResultModal() {
-  document.getElementById('result-modal').style.display = 'none';
-  capturedShots = [];
-  updateSidebarPreview([]); // Limpiar la tira para la siguiente sesión
-}
-
-function printCurrentPhoto() {
-  if (!lastGeneratedPhotoUrl) return;
-  printPhoto(lastGeneratedPhotoUrl);
-}
-
-async function shareCurrentPhoto() {
-  if (!lastGeneratedPhotoUrl) return;
-
-  try {
-    const blob = await (await fetch(lastGeneratedPhotoUrl)).blob();
-    const file = new File([blob], `fotocabina_${Date.now()}.jpg`, { type: 'image/jpeg' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: 'Mi Tira de Fotos',
-        text: '¡Mira mi foto tomada en la cabina!',
-        files: [file]
-      });
-    } else {
-      const a = document.createElement('a');
-      a.href = lastGeneratedPhotoUrl;
-      a.download = `fotocabina_${Date.now()}.jpg`;
-      a.click();
-    }
-  } catch (err) {
-    console.error("Error al compartir:", err);
-  }
-}
-
-function renderGallery() {
-  const grid = document.getElementById('gallery-grid');
-  grid.innerHTML = '';
-
-  const photos = JSON.parse(localStorage.getItem('pb_photos_gallery') || '[]');
-  if (photos.length === 0) {
-    grid.innerHTML = '<p>No hay fotos tomadas aún.</p>';
-    return;
-  }
-
-  photos.reverse().forEach(p => {
-    const item = document.createElement('div');
-    item.className = 'gallery-item';
-    item.innerHTML = `
-      <img src="${p.data}" alt="Foto 4x6">
-      <small>${p.date}</small>
-      <button onclick="printPhoto('${p.data}')">Imprimir / Descargar</button>
-    `;
-    grid.appendChild(item);
-  });
-}
-
-function printPhoto(dataUrl) {
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>Imprimir Foto 4x6</title>
-        <style>
-          @page { size: 4in 6in; margin: 0; }
-          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
-          img { width: 100%; height: 100%; object-fit: contain; }
-        </style>
-      </head>
-      <body>
-        <img src="${dataUrl}" onload="window.print(); window.close();">
-      </body>
-    </html>
-  `);
-}
+window.addEventListener('load', () => {
+  camera().catch(() => {});
+});
